@@ -34,6 +34,13 @@
   #orbisAlert b{font-size:22px;display:block}
   #orbisAlert span{font-size:14px;color:#fecaca}
 
+  /* 位置の状態バッジ */
+  #mode{position:fixed;left:12px;z-index:15;bottom:calc(env(safe-area-inset-bottom) + 150px);
+    font-size:12px;font-weight:700;padding:6px 10px;border-radius:999px;background:var(--panel);border:1px solid var(--line);color:var(--sub)}
+  #mode.snap{color:#86efac;border-color:#166534}
+  #mode.dr{color:#fde68a;border-color:#a16207;background:rgba(66,32,6,.92)}
+  #mode.lost{color:#fca5a5;border-color:#991b1b}
+
   /* 下：情報バー */
   #bottom{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--panel);border-top:1px solid var(--line);
     padding:8px 12px calc(env(safe-area-inset-bottom) + 10px)}
@@ -50,6 +57,7 @@
   /* 右側の小ボタン */
   #side{position:fixed;right:12px;z-index:15;display:flex;flex-direction:column;gap:8px;bottom:calc(env(safe-area-inset-bottom) + 150px)}
   #side button{width:46px;height:46px;border-radius:12px;border:1px solid var(--line);background:var(--panel);color:var(--text);font-size:13px;font-weight:700}
+  #side button.on{background:var(--accent);border-color:var(--accent)}
 
   /* シート */
   .sheet{position:fixed;left:0;right:0;bottom:0;z-index:40;background:#161a1f;border-top:1px solid var(--line);
@@ -72,25 +80,28 @@
   .res small{display:block;color:var(--sub);font-size:12px;margin-top:2px}
   .res .acts{display:flex;gap:6px;margin-top:6px}
   .res .acts button{flex:1;height:34px;border-radius:8px;border:1px solid var(--line);background:#1f242b;color:var(--text);font-size:12px;font-weight:700}
-  .row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px}
-  .row input[type=checkbox]{width:24px;height:24px}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px}
+  .row input[type=checkbox]{width:24px;height:24px;flex:none}
   .row select{font-size:14px;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:6px}
   .route{padding:10px;border:1px solid var(--line);border-radius:12px;margin-top:8px}
   .route.sel{border-color:var(--accent);background:rgba(59,130,246,.12)}
   .route b{font-size:16px}
   .route small{display:block;color:var(--sub);font-size:12px;margin-top:4px;line-height:1.5}
   .note{font-size:12px;color:var(--sub);line-height:1.7;margin-top:10px}
+  textarea{width:100%;height:120px;margin-top:8px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--text);font-size:12px;padding:8px}
 
   /* 長押しメニュー */
   #ctx{position:fixed;z-index:50;display:none;background:#161a1f;border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:170px}
   #ctx button{display:block;width:100%;text-align:left;padding:12px 14px;background:none;border:none;border-bottom:1px solid var(--line);color:var(--text);font-size:14px}
   #ctx button:last-child{border-bottom:none;color:var(--sub)}
 
-  /* 自車 */
+  /* 自車・ピン */
   .puck{width:44px;height:44px}
   .puck svg{width:44px;height:44px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.5))}
+  .puck.dr svg path{fill:#f59e0b}
   .wp{width:28px;height:28px;border-radius:14px;border:3px solid #fff;display:flex;align-items:center;justify-content:center;
     color:#fff;font-weight:800;font-size:12px;box-shadow:0 2px 6px rgba(0,0,0,.4)}
+  .editpin{width:26px;height:26px;border-radius:13px;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.5)}
   .maplibregl-ctrl-attrib{font-size:9px}
 </style>
 </head>
@@ -99,6 +110,7 @@
 
 <div id="turn"><div id="turnArrow">↑</div><div><div id="turnDist">--</div><div id="turnText"></div></div></div>
 <div id="orbisAlert"><b id="oaTitle">オービス</b><span id="oaText"></span></div>
+<div id="mode">待機中</div>
 
 <div id="side">
   <button id="btnFollow">追従</button>
@@ -154,18 +166,27 @@
       <option value="bright">明るい</option>
       <option value="positron">シンプル</option>
     </select></div>
-  <div class="row"><span>再生（シミュ）の速さ</span>
+  <h3>再生（シミュ）</h3>
+  <div class="row"><span>速さ</span>
     <select id="optSimSpeed">
       <option value="1">実速（60km/h）</option>
       <option value="3" selected>3倍速</option>
       <option value="8">8倍速</option>
     </select></div>
+  <div class="row"><span>山手トンネル内でGPSを切る（実走の再現）</span><input type="checkbox" id="optSimDrop" checked></div>
+  <div class="row"><span>GPSのブレを加える（±8m）</span><input type="checkbox" id="optSimNoise" checked></div>
   <button class="wide" id="btnTest">音声テスト</button>
+  <h3>オービス位置の修正</h3>
+  <div class="row"><span>ピンをドラッグして修正する</span><input type="checkbox" id="optEdit"></div>
+  <button class="wide" id="btnExport">修正した位置を書き出す</button>
+  <textarea id="exportBox" readonly hidden></textarea>
+  <button class="wide" id="btnResetEdit">修正を元に戻す</button>
   <p class="note">
+    ・航空写真やストリートビュー、実走で正しい位置がわかったら、ここでピンを動かせます（この端末に保存）。書き出した内容をチャットに貼ってもらえれば、本体のデータに反映します。<br>
     ・地図：OpenFreeMap／© OpenStreetMap contributors<br>
     ・ルート検索：Valhalla（FOSSGIS公開サーバー）／地点検索：Nominatim<br>
     ・ルート検索はバイクの規制（二輪通行止め・二人乗り規制など）を考慮しません。<br>
-    ・オービス位置は概算を含みます。山手トンネル内はGPSが届かないため、入口で予告します。<br>
+    ・トンネル内はGPSが届かないため、直前の速度でルート上を進めた「推定位置」になります。渋滞するとずれます。<br>
     ・画面ロック中・別アプリ表示中は動作しません。給電しながら使ってください。<br>
     ・走行中は画面を注視せず、音声で確認してください。
   </p>
@@ -181,9 +202,11 @@
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script>
 /* =========================================================
-   オービスデータ（ここを編集すれば追加・修正できます）
-   dir：通過時の進行方向（真北0°・時計回り）／warn：警告距離(m)
-   type：orbis＝本体、announce＝トンネル入口などの予告
+   オービスデータ（2026/11 更新）
+   lat/lon：OpenStreetMapの道路線上（該当方向の車線）に合わせた位置
+   dir    ：通過時の進行方向（真北0°・時計回り）
+   unc    ：道路に沿った方向の誤差の目安(m)。この分だけ早めに警告する
+   warn   ：警告距離(m)
    ========================================================= */
 const LAYERS = {
   c2in:  { name:'C2 内回り',    color:'#ef4444', on:true },
@@ -191,42 +214,54 @@ const LAYERS = {
   daisan:{ name:'第三京浜',     color:'#a855f7', on:true },
   ann:   { name:'トンネル予告', color:'#3b82f6', on:true }
 };
+const C2R = ['中央環状','C2'];
 const POINTS = [
-  { id:'c2in1', layer:'c2in', type:'orbis', name:'C2内回り① 千住新橋出口の先', lat:35.7620, lon:139.7985, dir:285, limit:60, warn:[1000,300],
-    info:'堀切JCT→江北JCT方面（高架）／ループコイル式（LC）／左側から設置' },
-  { id:'c2in2', layer:'c2in', type:'orbis', name:'C2内回り② 東中野（山手トンネル内）', lat:35.7080, lon:139.6830, dir:190, limit:60, warn:[1000,300],
-    info:'西池袋〜中野長者橋の間／LH式' },
-  { id:'c2in3', layer:'c2in', type:'orbis', name:'C2内回り③ 大橋JCT〜五反田（山手トンネル内）', lat:35.6320, lon:139.7070, dir:140, limit:60, warn:[3000,1000,300],
-    info:'大橋JCT合流後、青看板3枚・電光掲示板1つを過ぎ2つ目の非常口の少し先／LH式' },
-  { id:'c2out1', layer:'c2out', type:'orbis', name:'C2外回り① 千住新橋合流部', lat:35.7620, lon:139.7995, dir:105, limit:60, warn:[1000,300],
-    info:'江北JCT→堀切JCT方面（高架）／ループコイル式（LC）' },
-  { id:'c2out2', layer:'c2out', type:'orbis', name:'C2外回り② 東中野（山手トンネル内）', lat:35.705889, lon:139.682686, dir:5, limit:60, warn:[1000,300],
-    info:'西新宿JCT→池袋方面／LH式／青看板2枚の後' },
-  { id:'c2out3', layer:'c2out', type:'orbis', name:'C2外回り③ 下目黒（山手トンネル内・品川線）', lat:35.6305, lon:139.7085, dir:330, limit:60, warn:[1000,300],
-    info:'大井JCT→大橋JCT方面／LH式／五反田入口の合流から約1km先' },
-  { id:'daisan1', layer:'daisan', type:'orbis', name:'第三京浜 下り KP6.1', lat:35.5567, lon:139.6160, dir:225, limit:80, warn:[1000,300],
-    info:'京浜川崎IC〜都筑IC間／都筑2km標識から500m先' },
-  { id:'ann_in_north', layer:'ann', type:'announce', name:'予告：山手トンネル北口（内回り）', lat:35.7385, lon:139.6895, dir:195, radius:700,
-    msg:'まもなく山手トンネルです。トンネル内、東中野付近と、大橋ジャンクションの先に、固定オービスがあります。' },
-  { id:'ann_out_south', layer:'ann', type:'announce', name:'予告：山手トンネル南口（外回り・大井側）', lat:35.6080, lon:139.7420, dir:330, radius:700,
-    msg:'まもなく山手トンネルです。トンネル内、五反田入口の先と、東中野付近に、固定オービスがあります。' },
-  { id:'ann_out_ohashi', layer:'ann', type:'announce', name:'予告：大橋JCT（外回り）', lat:35.6505, lon:139.6855, dir:0, radius:500,
-    msg:'この先、再びトンネルです。トンネル内、東中野付近に、固定オービスがあります。' }
+  { id:'c2in1', layer:'c2in', type:'orbis', name:'C2内回り① 千住新橋出口の先', lat:35.761988, lon:139.798523, dir:270, unc:300, limit:60, warn:[1000,300], road:C2R,
+    info:'堀切JCT→江北JCT方面（高架）／ループコイル式（LC）／左側から設置', src:'park-do（2018）「千住新橋出口の先」' },
+  { id:'c2in2', layer:'c2in', type:'orbis', name:'C2内回り② 東中野（山手トンネル内）', lat:35.707844, lon:139.683524, dir:200, unc:800, limit:60, warn:[1000,300], road:C2R,
+    info:'西池袋〜中野長者橋の間／LH式', src:'park-do（2018）「西池袋と中野長者橋の間」、オービスガイド「中野区」' },
+  { id:'c2in3', layer:'c2in', type:'orbis', name:'C2内回り③ 大橋JCT〜五反田出口（山手トンネル内）', lat:35.641436, lon:139.701701, dir:146, unc:1400, limit:60, warn:[1000,300], road:C2R,
+    info:'大橋JCT〜五反田出口の約2.8km区間のどこか（区間の中央に配置）／LH式', src:'park-do（2018）、55drive「2つ目の非常口の少し先」' },
+  { id:'c2out1', layer:'c2out', type:'orbis', name:'C2外回り① 千住新橋合流部', lat:35.762134, lon:139.799505, dir:92, unc:300, limit:60, warn:[1000,300], road:C2R,
+    info:'江北JCT→堀切JCT方面（高架）／ループコイル式（LC）', src:'park-do（2018）「千住新橋入口からの合流地点」' },
+  { id:'c2out2', layer:'c2out', type:'orbis', name:'C2外回り② 東中野（山手トンネル内）', lat:35.705897, lon:139.682623, dir:7, unc:200, limit:60, warn:[1000,300], road:C2R,
+    info:'西新宿JCT→池袋方面／LH式／青看板2枚の後', src:'みんカラ投稿の座標（2010）' },
+  { id:'c2out3', layer:'c2out', type:'orbis', name:'C2外回り③ 五反田入口の約1km先（山手トンネル内）', lat:35.638321, lon:139.704431, dir:328, unc:300, limit:60, warn:[1000,300], road:C2R,
+    info:'大井JCT→大橋JCT方面／LH式', src:'park-do「五反田入口合流から約1km先」＋OSMの五反田分岐点から計算' },
+  { id:'daisan1', layer:'daisan', type:'orbis', name:'第三京浜 下り 都筑IC手前', lat:35.559654, lon:139.609270, dir:188, unc:350, limit:80, warn:[1000,300], road:['第三京浜','E83'],
+    info:'京浜川崎IC〜都筑IC間／ループコイル式H（LH説あり）', src:'オービスガイド「KP6.1／都筑2km標識から500m先」（2通りの計算の中間）' },
+  { id:'ann_in_north', layer:'ann', type:'announce', name:'予告：山手トンネル北口（内回り）', lat:35.738685, lon:139.704582, dir:223, radius:500, road:C2R,
+    msg:'まもなく山手トンネルです。トンネル内に固定オービスが2か所あります。東中野付近と、大橋ジャンクションから五反田出口の間です。トンネル内は推定位置で案内します。' },
+  { id:'ann_out_south', layer:'ann', type:'announce', name:'予告：山手トンネル南口（外回り・大井側）', lat:35.605929, lon:139.754538, dir:306, radius:400, road:['中央環状','C2','湾岸','B'],
+    msg:'まもなく山手トンネルです。トンネル内に固定オービスが2か所あります。五反田入口の約1キロ先と、東中野付近です。トンネル内は推定位置で案内します。' }
 ];
 
-/* 周回プリセット（heading＝その地点での進行方向。内回り・外回りの区別に使う） */
-/* hwy:true＝高速道路（motorway）にだけ吸着させる。一般道や並走道路に吸着するのを防ぐ */
+/* 各オービス手前の車線の線（OSMの道路線から抽出：手前約1.5km＋誤差分〜通過後150m）。
+   ルートなしで走るとき、この線の上を走っている場合だけ警告する */
+const APPROACH = {"c2in1":[[35.754979,139.815758],[35.755658,139.815032],[35.756323,139.814286],[35.756974,139.813522],[35.757588,139.812712],[35.758165,139.811863],[35.758706,139.810977],[35.759222,139.81007],[35.759683,139.809119],[35.760099,139.808136],[35.760473,139.807129],[35.760809,139.806101],[35.761109,139.805056],[35.761368,139.803995],[35.761585,139.80292],[35.761757,139.801832],[35.76188,139.800734],[35.761958,139.799631],[35.761988,139.798523],[35.761972,139.797415],[35.76195,139.796862]],"c2in2":[[35.725864,139.695498],[35.725064,139.694991],[35.724291,139.694427],[35.723585,139.693741],[35.722881,139.693052],[35.72217,139.692374],[35.721458,139.691698],[35.720746,139.691021],[35.720035,139.690342],[35.719325,139.689663],[35.718621,139.688973],[35.717914,139.688291],[35.717097,139.687831],[35.716254,139.687445],[35.715411,139.687059],[35.714568,139.686673],[35.713725,139.686286],[35.712883,139.6859],[35.712042,139.685508],[35.711205,139.685102],[35.71037,139.684691],[35.709534,139.684283],[35.708689,139.683903],[35.707844,139.683524],[35.706999,139.683144],[35.706577,139.682953]],"c2in3":[[35.66248,139.687727],[35.661603,139.687944],[35.660824,139.68849],[35.660079,139.689109],[35.659333,139.689728],[35.658588,139.690347],[35.657806,139.690888],[35.656919,139.691006],[35.656061,139.690696],[35.655229,139.690274],[35.654385,139.689896],[35.653504,139.689698],[35.652605,139.689699],[35.651706,139.689734],[35.650837,139.689983],[35.650104,139.690618],[35.649455,139.691383],[35.648887,139.692241],[35.648331,139.69311],[35.647782,139.693986],[35.647231,139.694861],[35.646656,139.695712],[35.64611,139.696591],[35.645566,139.697471],[35.64493,139.698253],[35.644295,139.699037],[35.643653,139.699811],[35.642925,139.70046],[35.64218,139.701079],[35.641436,139.701702],[35.640687,139.702313],[35.64031,139.702615]],"c2out1":[[35.75971,139.779818],[35.759818,139.780918],[35.759952,139.782014],[35.76011,139.783105],[35.760272,139.784195],[35.760437,139.785284],[35.760601,139.786374],[35.760764,139.787464],[35.760931,139.788553],[35.761107,139.78964],[35.761285,139.790726],[35.761466,139.791812],[35.761637,139.7929],[35.761802,139.793989],[35.761956,139.795081],[35.76207,139.79618],[35.762136,139.797285],[35.762155,139.798393],[35.762135,139.799501],[35.762135,139.799501]],"c2out2":[[35.690792,139.681563],[35.691681,139.681722],[35.692568,139.681903],[35.693457,139.68207],[35.694346,139.682242],[35.695234,139.68242],[35.69612,139.682605],[35.697008,139.682782],[35.697903,139.682889],[35.698801,139.682953],[35.699699,139.683011],[35.700594,139.682946],[35.701452,139.682618],[35.702315,139.682318],[35.703213,139.682292],[35.704108,139.682399],[35.705003,139.682506],[35.705897,139.682623],[35.706762,139.682919],[35.707183,139.683113]],"c2out3":[[35.626068,139.716736],[35.626551,139.715803],[35.627044,139.714877],[35.627531,139.713947],[35.628022,139.71302],[35.628515,139.712095],[35.629061,139.711218],[35.629782,139.710562],[35.630548,139.709983],[35.631325,139.709424],[35.632107,139.708879],[35.632895,139.708346],[35.633683,139.707813],[35.634478,139.707296],[35.635273,139.706778],[35.636055,139.706231],[35.636813,139.705637],[35.63756,139.70502],[35.638321,139.704431],[35.639081,139.703839],[35.639458,139.703538]],"daisan1":[[35.574964,139.616669],[35.574092,139.616399],[35.573234,139.616071],[35.572398,139.615662],[35.571577,139.615213],[35.57078,139.614701],[35.570001,139.614148],[35.569233,139.613572],[35.568473,139.612982],[35.567707,139.612404],[35.56693,139.611847],[35.566138,139.611323],[35.565332,139.610834],[35.564495,139.61043],[35.563641,139.610083],[35.562769,139.609814],[35.561885,139.609615],[35.560994,139.609461],[35.560099,139.60935],[35.559205,139.609238],[35.558313,139.609096],[35.558313,139.609096]]};
+
+/* 山手トンネル（西池袋付近〜大井JCT）の中心線。シミュでGPSを切る範囲の判定に使う */
+const YAMATE_TUNNEL = [[35.733836,139.699718],[35.731311,139.698546],[35.728804,139.697321],[35.726392,139.695831],[35.724049,139.694198],[35.721927,139.692144],[35.719793,139.690111],[35.717644,139.688114],[35.715125,139.686928],[35.712596,139.685768],[35.710087,139.684549],[35.707557,139.683395],[35.704954,139.682611],[35.702266,139.682421],[35.699654,139.683135],[35.69696,139.682967],[35.694291,139.68249],[35.691626,139.681969],[35.689019,139.682319],[35.68692,139.684404],[35.684694,139.68627],[35.682519,139.688235],[35.679983,139.688789],[35.677359,139.688064],[35.674666,139.687904],[35.671969,139.687806],[35.669276,139.687978],[35.666579,139.688052],[35.663887,139.687851],[35.661254,139.688146],[35.659013,139.689994],[35.656539,139.690922],[35.654013,139.689766],[35.651321,139.689781],[35.649204,139.691745],[35.64755,139.694367],[35.645882,139.696975],[35.644025,139.699378],[35.64186,139.701347],[35.639612,139.703181],[35.637336,139.704965],[35.635045,139.706713],[35.632676,139.708302],[35.630323,139.709924],[35.628322,139.712074],[35.626857,139.714862],[35.625354,139.717618],[35.623994,139.720484],[35.622546,139.723279],[35.620932,139.725919],[35.620809,139.729202],[35.619491,139.73201],[35.617668,139.734395],[35.615791,139.736608],[35.61574,139.739907],[35.616491,139.743093],[35.617261,139.746274],[35.618172,139.749389],[35.617396,139.752406],[35.614863,139.753199],[35.612167,139.753106],[35.611,139.753015]];
+
+/* 周回プリセット（heading＝その地点での進行方向、hwy＝高速道路にだけ吸着） */
 const PRESETS = {
   c2in: { name:'C2内回り 1周', loop:true, pts:[
-    { name:'足立（C2内回り）',              lat:35.7620, lon:139.7991, heading:285, hwy:true },
+    { name:'足立（C2内回り）',                lat:35.7620, lon:139.7991, heading:285, hwy:true },
     { name:'山手トンネル 富ヶ谷付近（南行）', lat:35.6650, lon:139.6880, heading:165, hwy:true },
-    { name:'湾岸線 有明付近（東行）',       lat:35.6345, lon:139.7895, heading:60,  hwy:true },
-    { name:'C2 平井付近（北行）',           lat:35.7150, lon:139.8470, heading:350, hwy:true }
+    { name:'湾岸線 有明付近（東行）',         lat:35.6345, lon:139.7895, heading:60,  hwy:true },
+    { name:'C2 平井付近（北行）',             lat:35.7150, lon:139.8470, heading:350, hwy:true }
   ]}
 };
 
 /* ===== 判定の設定 ===== */
 const HEADING_TOL = 60, AHEAD_TOL = 50, MIN_SPEED = 2;
+const BAD_ACC = 80;          // これより精度が悪いGPSは位置として使わない(m)
+const DR_AFTER = 3000;       // GPSが途切れてから推定走行に切り替えるまで(ms)
+const DR_MAX = 30*60*1000;   // 推定走行を続ける上限(ms)
+const ON_ROUTE_POINT = 45;   // オービスがルート上にあるとみなす距離(m)
+const APPROACH_TOL = 25;     // ルートなしのとき、手前の車線の線から何mまでを「その道路」とみなすか
+const DR_MIN_SPEED = 16.7;   // 推定走行の最低速度(m/s)＝60km/h。渋滞時は警告が早まる側に倒す
+const DR_MAX_DIST = 3000;    // 山手トンネル以外で推定走行を進める上限(m)
 
 /* ===== 計算ユーティリティ ===== */
 const ER = 6371000, rad = d => d*Math.PI/180, deg = r => r*180/Math.PI;
@@ -244,6 +279,20 @@ function angDiff(a, b){ const d = Math.abs(a-b) % 360; return d > 180 ? 360-d : 
 function fmtDist(m){ return m >= 1000 ? (m/1000).toFixed(m >= 10000 ? 0 : 1)+'km' : Math.max(0, Math.round(m/10)*10)+'m'; }
 function fmtTime(s){ const m = Math.round(s/60); return m >= 60 ? Math.floor(m/60)+'時間'+(m%60)+'分' : m+'分'; }
 function speakDist(m){ return m >= 1000 ? (m%1000 === 0 ? m/1000 : (m/1000).toFixed(1))+'キロ' : m+'メートル'; }
+
+/* 点から折れ線までの最短距離(m)（平面近似） */
+function distToLine(pos, line){
+  let best = Infinity;
+  for (let i = 0; i < line.length-1; i++){
+    const p = { lat:line[i][0], lon:line[i][1] }, q = { lat:line[i+1][0], lon:line[i+1][1] };
+    const kx = Math.cos(rad(p.lat))*111320, ky = 110540;
+    const qx = (q.lon-p.lon)*kx, qy = (q.lat-p.lat)*ky, px = (pos.lon-p.lon)*kx, py = (pos.lat-p.lat)*ky;
+    const L2 = qx*qx + qy*qy; let t = L2 ? (px*qx + py*qy)/L2 : 0; t = Math.max(0, Math.min(1, t));
+    best = Math.min(best, Math.hypot(px - t*qx, py - t*qy));
+  }
+  return best;
+}
+const inYamateTunnel = pos => distToLine(pos, YAMATE_TUNNEL) < 60;
 
 /* Valhallaのshape（polyline6）を [{lat,lon}] に */
 function decodePolyline6(str){
@@ -268,14 +317,13 @@ function roadLabel(names){
   const ref = names.find(s => REF_JA[s]); if (ref) return REF_JA[ref];
   return null;
 }
-
 /* 案内文から英語表記（/Central Circular Route など）を除く */
 function cleanText(s){ return s.replace(/\/[A-Za-z][A-Za-z0-9 .'’\-ōūāēī]*/g, '').replace(/\s{2,}/g, ' '); }
 
 /* 複数レグのtripを1本のルートに結合 */
 function buildRoute(trip){
   const coords = [], maneuvers = [], roads = [];
-  trip.legs.forEach((leg, li) => {
+  trip.legs.forEach(leg => {
     const pts = decodePolyline6(leg.shape);
     const offset = coords.length === 0 ? 0 : coords.length - 1;
     (coords.length === 0 ? pts : pts.slice(1)).forEach(p => coords.push(p));
@@ -291,25 +339,47 @@ function buildRoute(trip){
   return { coords, cum, maneuvers, roads, length:trip.summary.length*1000, time:trip.summary.time };
 }
 
-/* ルート上の現在位置（直前の位置から前方を優先して探索） */
-function locateOnRoute(route, pos, lastIdx){
-  const n = route.coords.length;
-  let best = { idx:lastIdx || 0, d:Infinity, along:0 };
-  const from = Math.max(0, (lastIdx || 0) - 30), to = Math.min(n - 1, (lastIdx || 0) + 400);
-  const scan = (a, b) => {
-    for (let i = a; i < b; i++){
-      const p = route.coords[i], q = route.coords[i+1];
-      // 区間 p→q への射影（平面近似）
-      const kx = Math.cos(rad(p.lat)) * 111320, ky = 110540;
-      const qx = (q.lon-p.lon)*kx, qy = (q.lat-p.lat)*ky, px = (pos.lon-p.lon)*kx, py = (pos.lat-p.lat)*ky;
-      const L2 = qx*qx + qy*qy; let t = L2 ? (px*qx + py*qy)/L2 : 0; t = Math.max(0, Math.min(1, t));
-      const dx = px - t*qx, dy = py - t*qy, d = Math.sqrt(dx*dx + dy*dy);
-      if (d < best.d) best = { idx:i, d, along: route.cum[i] + t*(route.cum[i+1]-route.cum[i]) };
-    }
-  };
-  scan(from, to);
-  if (best.d > 200) scan(0, n - 1); // 見失ったら全体を探索
+/* ルート上の位置。from〜toの添字範囲を探す */
+function projectRange(route, pos, from, to){
+  let best = { idx:from, d:Infinity, along:0 };
+  for (let i = Math.max(0, from); i < Math.min(route.coords.length-1, to); i++){
+    const p = route.coords[i], q = route.coords[i+1];
+    const kx = Math.cos(rad(p.lat))*111320, ky = 110540;
+    const qx = (q.lon-p.lon)*kx, qy = (q.lat-p.lat)*ky, px = (pos.lon-p.lon)*kx, py = (pos.lat-p.lat)*ky;
+    const L2 = qx*qx + qy*qy; let t = L2 ? (px*qx + py*qy)/L2 : 0; t = Math.max(0, Math.min(1, t));
+    const d = Math.hypot(px - t*qx, py - t*qy);
+    if (d < best.d) best = { idx:i, d, along: route.cum[i] + t*(route.cum[i+1]-route.cum[i]) };
+  }
   return best;
+}
+/* 直前の位置の近くを優先して探し、見失ったら全体を探す */
+function locateOnRoute(route, pos, lastIdx, back, fwd){
+  const li = lastIdx || 0;
+  let best = projectRange(route, pos, li - (back || 30), li + (fwd || 400));
+  if (best.d > 200) best = projectRange(route, pos, 0, route.coords.length - 1);
+  return best;
+}
+/* 道のりsメートル地点の添字 */
+function idxAt(route, s){
+  const cum = route.cum; let lo = 0, hi = cum.length - 1;
+  if (s <= 0) return 0; if (s >= cum[hi]) return hi - 1;
+  while (hi - lo > 1){ const mid = (lo+hi) >> 1; if (cum[mid] <= s) lo = mid; else hi = mid; }
+  return lo;
+}
+/* ルートに沿って距離sの地点と向き */
+function pointAt(route, s){
+  const c = route.coords, cum = route.cum, n = c.length;
+  if (s <= 0) return { pos:c[0], heading:bearing(c[0], c[1]), idx:0 };
+  if (s >= cum[n-1]) return { pos:c[n-1], heading:bearing(c[n-2], c[n-1]), end:true, idx:n-2 };
+  const lo = idxAt(route, s), hi = lo + 1;
+  const t = (s - cum[lo]) / ((cum[hi] - cum[lo]) || 1);
+  const pos = { lat: c[lo].lat + (c[hi].lat - c[lo].lat)*t, lon: c[lo].lon + (c[hi].lon - c[lo].lon)*t };
+  return { pos, heading: bearing(c[lo], c[hi]), idx:lo };
+}
+/* ルートの向き（前後を少し広く見て、細かな折れで揺れないように） */
+function routeHeadingAt(route, s){
+  const a = pointAt(route, Math.max(0, s - 15)).pos, b = pointAt(route, s + 25).pos;
+  return dist(a, b) > 3 ? bearing(a, b) : pointAt(route, s).heading;
 }
 
 /* 次の案内 */
@@ -321,19 +391,32 @@ function nextManeuver(route, along){
   return null;
 }
 
-/* ルートに沿って距離sの地点と向き（再生用） */
-function pointAt(route, s){
-  const c = route.coords, cum = route.cum;
-  if (s <= 0) return { pos:c[0], heading:bearing(c[0], c[1]) };
-  if (s >= cum[cum.length-1]) { const n = c.length; return { pos:c[n-1], heading:bearing(c[n-2], c[n-1]), end:true }; }
-  let lo = 0, hi = cum.length - 1;
-  while (hi - lo > 1){ const mid = (lo+hi) >> 1; if (cum[mid] <= s) lo = mid; else hi = mid; }
-  const t = (s - cum[lo]) / ((cum[hi] - cum[lo]) || 1);
-  const pos = { lat: c[lo].lat + (c[hi].lat - c[lo].lat)*t, lon: c[lo].lon + (c[hi].lon - c[lo].lon)*t };
-  return { pos, heading: bearing(c[lo], c[hi]) };
+/* ルート上の添字idxを走っている区間の道路名 */
+function streetsAt(route, idx){
+  let names = null;
+  for (const m of route.maneuvers){ if (m.begin <= idx) names = m.streets; else break; }
+  return names;
+}
+/* ルート上にあるオービス・予告地点を、道のりの位置つきで列挙。
+   真下や真横を並走する一般道のルートと区別するため、道路名も照合する */
+function pointsOnRoute(route, points, layersOn){
+  const out = [];
+  for (const p of points){
+    if (!layersOn[p.layer]) continue;
+    const loc = projectRange(route, p, 0, route.coords.length - 1);
+    if (loc.d > (p.type === 'announce' ? 70 : ON_ROUTE_POINT)) continue;
+    const rh = routeHeadingAt(route, loc.along);
+    if (angDiff(rh, p.dir) > (p.type === 'announce' ? 70 : 50)) continue;
+    if (p.road && route.maneuvers.length){
+      const names = streetsAt(route, loc.idx) || [];
+      if (!names.some(n => p.road.some(k => n.includes(k)))) continue;
+    }
+    out.push({ point:p, along:loc.along });
+  }
+  return out.sort((a, b) => a.along - b.along);
 }
 
-/* オービス警告判定 */
+/* ルートがないときのオービス判定（直線距離＋進行方向） */
 function evaluate(pos, heading, speed, points, layersOn, state){
   const alerts = []; let next = null;
   for (const p of points){
@@ -348,21 +431,131 @@ function evaluate(pos, heading, speed, points, layersOn, state){
       }
       continue;
     }
-    const maxWarn = Math.max(...p.warn);
+    const unc = p.unc || 0, maxWarn = Math.max(...p.warn) + unc;
     if (d > maxWarn + 1000) { st.done = []; continue; }
     if (heading == null || speed < MIN_SPEED) continue;
     const sameDir = angDiff(heading, p.dir) <= HEADING_TOL;
     const ahead = d < 80 || angDiff(heading, bearing(pos, p)) <= AHEAD_TOL;
     if (!sameDir || !ahead) continue;
+    // 手前の車線の線から外れていれば、並走する別の道路とみなす
+    if (APPROACH[p.id] && distToLine(pos, APPROACH[p.id]) > APPROACH_TOL) continue;
     if (!next || d < next.d) next = { point:p, d };
-    for (const thr of [...p.warn].sort((a,b) => b-a)){
-      if (d <= thr && !st.done.includes(thr)){
-        p.warn.filter(t => t >= thr).forEach(t => { if (!st.done.includes(t)) st.done.push(t); });
-        alerts.push({ point:p, text: speakDist(thr)+'先、オービス。制限'+p.limit+'キロ。', kind:'orbis', thr });
-      }
-    }
+    pushWarn(p, d - unc, st, alerts);
   }
   return { alerts, next };
+}
+/* 閾値を越えたら読み上げ（まとめて越えたら近い方だけ） */
+function pushWarn(p, dEff, st, alerts){
+  for (const thr of [...p.warn].sort((a,b) => b-a)){
+    if (dEff <= thr && !st.done.includes(thr)){
+      p.warn.filter(t => t >= thr).forEach(t => { if (!st.done.includes(t)) st.done.push(t); });
+      const zone = (p.unc || 0) >= 600 ? '、この先の区間内' : '';
+      alerts.push({ point:p, kind:'orbis', thr, text: speakDist(thr)+'先'+zone+'、オービス。制限'+p.limit+'キロ。' });
+    }
+  }
+}
+
+/* =========================================================
+   位置推定エンジン
+   ・ルートがあるときはGPSをルート線上に吸着（車線の取り違えとブレを抑える）
+   ・GPSが途切れたら、直近30秒の平均速度でルート上を進める（トンネル対策）
+   ・オービスはルート上の道のりで判定（並走する一般道で誤警告しない）
+   ========================================================= */
+function createEngine(){
+  const E = { route:null, onRoute:[], along:null, idx:0, mode:'none', pos:null, heading:null, speed:0,
+    lastGood:null, lastT:null, hist:[], state:{}, acc:null };
+  E.setRoute = (route, points, layersOn) => {
+    E.route = route; E.onRoute = route ? pointsOnRoute(route, points, layersOn) : [];
+    E.along = null; E.idx = 0; E.state = {}; if (E.mode === 'snap' || E.mode === 'dr') E.mode = 'free';
+  };
+  E.reset = () => { E.along = null; E.idx = 0; E.state = {}; E.lastGood = null; E.lastT = null; E.hist = []; E.mode = 'none'; E.speed = 0; E.heading = null; };
+  function avgSpeed(t){
+    E.hist = E.hist.filter(h => t - h.t <= 30000);
+    if (!E.hist.length) return E.speed;
+    return E.hist.reduce((s, h) => s + h.v, 0) / E.hist.length;
+  }
+  E.gps = (fix, points, layersOn) => {
+    const t = fix.t, raw = { lat:fix.lat, lon:fix.lon };
+    E.acc = fix.acc;
+    if (fix.acc != null && fix.acc > BAD_ACC) return E.tick(t, points, layersOn); // 精度の悪いGPSは捨てる
+
+    // 速度：端末の値（iPhoneは無効時に-1）→なければ移動量から
+    let v = (fix.speed != null && fix.speed >= 0 && !isNaN(fix.speed)) ? fix.speed : null;
+    if (v == null && E.lastGood){
+      const dt = (t - E.lastGood.t) / 1000, mv = dist(E.lastGood.raw, raw);
+      if (dt > 0.3 && mv >= 8) v = mv / dt;
+    }
+    if (v != null){ E.speed = E.speed ? E.speed*0.6 + v*0.4 : v; E.hist.push({ t, v }); }
+
+    const wasDr = E.mode === 'dr' || E.mode === 'lost';
+    let snapped = false;
+    if (E.route){
+      const tol = Math.max(30, Math.min(fix.acc || 20, 60) * 1.5);
+      const loc = wasDr ? locateOnRoute(E.route, raw, E.idx, 600, 1500) : locateOnRoute(E.route, raw, E.idx, 30, 400);
+      if (loc.d <= tol){
+        snapped = true; E.along = loc.along; E.idx = loc.idx;
+        E.pos = pointAt(E.route, E.along).pos; E.heading = routeHeadingAt(E.route, E.along); E.mode = 'snap';
+        E.offBy = 0;
+      } else E.offBy = loc.d;
+    }
+    if (!snapped){
+      let h = null;
+      if (fix.heading != null && !isNaN(fix.heading) && fix.heading >= 0 && E.speed >= MIN_SPEED) h = fix.heading;
+      else if (E.lastGood && dist(E.lastGood.raw, raw) >= 8) h = bearing(E.lastGood.raw, raw);
+      if (h != null) E.heading = h;
+      E.pos = raw; E.mode = 'free';
+    }
+    E.lastGood = { t, raw }; E.lastT = t;
+    return E.result(t, points, layersOn, wasDr && snapped ? 'resync' : null);
+  };
+  /* GPSが来ない間も定期的に呼ぶ（推定走行） */
+  E.tick = (t, points, layersOn) => {
+    if (!E.route || E.along == null || !E.lastGood) return null;
+    const since = t - E.lastGood.t;
+    if (since < DR_AFTER || !(E.mode === 'snap' || E.mode === 'dr')) { return null; }
+    if (since > DR_MAX){ E.mode = 'lost'; return E.result(t, points, layersOn); }
+    if (E.mode !== 'dr'){ E.drFrom = E.along; E.drTunnel = false; E.drHold = false; }
+    // 速度は直近30秒の平均。ただし60km/h未満なら60km/hで進める（警告が遅れないように）
+    const v = Math.max(avgSpeed(E.lastGood.t), DR_MIN_SPEED);
+    const dt = Math.max(0, (t - (E.lastT || t)) / 1000);
+    E.lastT = t;
+    const total = E.route.cum[E.route.cum.length-1];
+    let nextAlong = Math.min(total, E.along + v * dt);
+    const np = pointAt(E.route, nextAlong);
+    const inT = inYamateTunnel(np.pos);
+    if (inT) E.drTunnel = true;
+    if ((E.drTunnel && !inT) || (!E.drTunnel && nextAlong - E.drFrom > DR_MAX_DIST)){
+      nextAlong = E.along; E.drHold = true;            // トンネル出口（または上限）で止めてGPSの復帰を待つ
+    }
+    E.along = nextAlong;
+    const p = pointAt(E.route, E.along);
+    E.pos = p.pos; E.idx = p.idx; E.heading = routeHeadingAt(E.route, E.along); E.mode = 'dr'; E.speed = v;
+    return E.result(t, points, layersOn);
+  };
+  E.result = (t, points, layersOn, event) => {
+    let alerts = [], next = null;
+    if (E.route && E.along != null && (E.mode === 'snap' || E.mode === 'dr')){
+      for (const o of E.onRoute){
+        const p = o.point, st = E.state[p.id] || (E.state[p.id] = { done:[] });
+        const d = o.along - E.along;
+        if (p.type === 'announce'){
+          if (d >= -50 && d <= p.radius && !st.done.length){ st.done.push('a'); alerts.push({ point:p, text:p.msg, kind:'announce' }); }
+          continue;
+        }
+        if (d < -50) continue;                         // 通過済み
+        if (!next || d < next.d) next = { point:p, d, onRoute:true };
+        const before = alerts.length;
+        pushWarn(p, d - (p.unc || 0), st, alerts);
+        if (E.mode === 'dr') alerts.slice(before).forEach(a => a.text += '推定位置です。');
+      }
+    } else if (E.pos){
+      const r = evaluate(E.pos, E.heading, E.speed, points, layersOn, E.state);
+      alerts = r.alerts; next = r.next;
+    }
+    return { pos:E.pos, heading:E.heading, speed:E.speed, along:E.along, mode:E.mode, acc:E.acc, offBy:E.offBy || 0,
+      hold: E.mode === 'dr' && !!E.drHold, alerts, next, event };
+  };
+  return E;
 }
 
 /* 曲がり方向の矢印（Valhallaのmaneuver type） */
@@ -395,7 +588,6 @@ async function requestRoute(pts, opts){
   ];
   let lastErr = null, first = true; const tried = new Set();
   for (const t of plan){
-    // 実質的に同じ条件の再試行は省く
     const key = [t.costing, t.lang, t.heading && hasHeading, t.filter && hasFilter].join('|');
     if (tried.has(key)) continue; tried.add(key);
     if (!first) await sleep(1100); first = false;
@@ -424,8 +616,13 @@ if (typeof window !== 'undefined' && window.maplibregl){
   const STYLE = s => 'https://tiles.openfreemap.org/styles/' + s;
   const store = {
     get(k, d){ try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch(e){ return d; } },
-    set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+    set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} },
+    del(k){ try { localStorage.removeItem(k); } catch(e){} }
   };
+
+  // 端末に保存したピン修正を反映
+  const overrides = store.get('pinOverrides', {});
+  POINTS.forEach(p => { const o = overrides[p.id]; if (o){ p.lat = o.lat; p.lon = o.lon; p.edited = true; } });
 
   const layersOn = {}; Object.keys(LAYERS).forEach(k => layersOn[k] = LAYERS[k].on);
   Object.assign(layersOn, store.get('layersOn', {}));
@@ -435,13 +632,12 @@ if (typeof window !== 'undefined' && window.maplibregl){
     attributionControl:{ compact:true }, maxPitch:70 });
 
   // ---- 状態 ----
-  let pts = [];               // 出発・経由・目的地
-  let routes = [], sel = 0;   // 検索結果
+  let pts = [];
+  let routes = [], sel = 0;
   let navOn = false, follow = true, mode3d = true, simOn = false;
-  let me = null, heading = null, speed = 0, lastFix = null, lastIdx = 0;
-  let watchId = null, wakeLock = null, simTimer = null, simS = 0;
-  const orbisState = {};
-  const spoken = new Set();
+  let watchId = null, wakeLock = null, simTimer = null, simS = 0, drTimer = null;
+  const eng = createEngine();
+  let last = null; // 最新の推定結果
 
   // ---- 地図レイヤー ----
   function routeFC(){
@@ -466,18 +662,21 @@ if (typeof window !== 'undefined' && window.maplibregl){
     if (!map.getLayer('orbis-pt')) map.addLayer({ id:'orbis-pt', type:'circle', source:'orbis',
       paint:{ 'circle-radius':['case',['==',['get','ann'],1],6,9], 'circle-color':['get','color'],
         'circle-stroke-color':'#fff', 'circle-stroke-width':2, 'circle-pitch-alignment':'map' } });
+    map.setLayoutProperty('orbis-pt', 'visibility', editOn ? 'none' : 'visible');
   }
   map.on('load', addLayers);
   map.on('styledata', () => { if (map.isStyleLoaded()) addLayers(); });
   function refreshRoutes(){ const s = map.getSource('routes'); if (s) s.setData(routeFC()); }
   function refreshOrbis(){ const s = map.getSource('orbis'); if (s) s.setData(orbisFC()); }
 
+  function pointHtml(p){
+    return p.type === 'announce' ? `<b>${p.name}</b><br>${p.msg}`
+      : `<b>${p.name}</b><br>制限${p.limit}km/h／進行方向${p.dir}°<br>${p.info}<br>誤差の目安：道なりに±${p.unc}m${p.edited ? '（この端末で修正済み）' : ''}<br><span style="color:#666">根拠：${p.src}</span>`;
+  }
   map.on('click', 'route-alt', e => { const i = e.features[0].properties.idx; selectRoute(i); });
   map.on('click', 'orbis-pt', e => {
     const p = POINTS.find(x => x.id === e.features[0].properties.id); if (!p) return;
-    const html = p.type === 'announce' ? `<b>${p.name}</b><br>${p.msg}`
-      : `<b>${p.name}</b><br>制限${p.limit}km/h／進行方向${p.dir}°<br>${p.info}<br><span style="color:#888">位置は概算</span>`;
-    new maplibregl.Popup({ closeButton:true, maxWidth:'260px' }).setLngLat([p.lon, p.lat]).setHTML(`<div style="color:#111;font-size:13px;line-height:1.6">${html}</div>`).addTo(map);
+    new maplibregl.Popup({ closeButton:true, maxWidth:'270px' }).setLngLat([p.lon, p.lat]).setHTML(`<div style="color:#111;font-size:13px;line-height:1.6">${pointHtml(p)}</div>`).addTo(map);
   });
 
   // ---- 自車マーカー ----
@@ -497,7 +696,7 @@ if (typeof window !== 'undefined' && window.maplibregl){
       const el = document.createElement('div'); el.className = 'wp'; el.style.background = ptColor(i);
       el.textContent = ptLabel(i);
       const m = new maplibregl.Marker({ element:el, draggable:true }).setLngLat([p.lon, p.lat]).addTo(map);
-      m.on('dragend', () => { const ll = m.getLngLat(); p.lat = ll.lat; p.lon = ll.lng; p.name = '指定地点'; delete p.heading; renderPts(); calcRoute(); });
+      m.on('dragend', () => { const ll = m.getLngLat(); p.lat = ll.lat; p.lon = ll.lng; p.name = '指定地点'; delete p.heading; delete p.hwy; renderPts(); calcRoute(); });
       wpMarkers.push(m);
     });
     renderPts();
@@ -521,7 +720,7 @@ if (typeof window !== 'undefined' && window.maplibregl){
     else { pts.push(p); }
     drawPoints(); clearRoutes();
   }
-  function clearRoutes(){ routes = []; sel = 0; refreshRoutes(); $('routeList').innerHTML = ''; updateRemain(); }
+  function clearRoutes(){ routes = []; sel = 0; eng.setRoute(null, POINTS, layersOn); refreshRoutes(); $('routeList').innerHTML = ''; updateRemain(); }
 
   // ---- 長押しメニュー ----
   let ctxLL = null, pressTimer = null, pressStart = null;
@@ -568,7 +767,7 @@ if (typeof window !== 'undefined' && window.maplibregl){
   $('q').addEventListener('keydown', e => { if (e.key === 'Enter') search(); });
 
   $('btnHere').onclick = () => {
-    if (me){ addPoint({ lat:me.lat, lon:me.lon, name:'現在地', heading: speed >= MIN_SPEED ? heading : null }, 'start'); return; }
+    if (last && last.pos){ addPoint({ lat:last.pos.lat, lon:last.pos.lon, name:'現在地', heading: last.speed >= MIN_SPEED ? last.heading : null }, 'start'); return; }
     setStatus('現在地を取得中…'); startGps(true);
   };
 
@@ -588,7 +787,8 @@ if (typeof window !== 'undefined' && window.maplibregl){
     $('routeList').innerHTML = '<div class="note">ルート検索中…</div>';
     try {
       const r = await requestRoute(list, { noHwy:$('optNoHwy').checked });
-      routes = r.routes; sel = 0; lastIdx = 0; spoken.clear();
+      routes = r.routes; sel = 0;
+      eng.setRoute(routes[sel], POINTS, layersOn);
       refreshRoutes(); renderRoutes(r); updateRemain();
       fitRoute();
     } catch(e){
@@ -597,14 +797,15 @@ if (typeof window !== 'undefined' && window.maplibregl){
     }
   }
   function renderRoutes(meta){
-    $('routeList').innerHTML = routes.map((r, i) => `
-      <div class="route ${i === sel ? 'sel' : ''}" data-sel="${i}">
+    $('routeList').innerHTML = routes.map((r, i) => {
+      const n = pointsOnRoute(r, POINTS, layersOn).filter(o => o.point.type === 'orbis').length;
+      return `<div class="route ${i === sel ? 'sel' : ''}" data-sel="${i}">
         <b>${i === 0 ? 'おすすめ' : '候補' + (i+1)}　${fmtDist(r.length)}／${fmtTime(r.time)}</b>
-        <small>主な道路：${escapeHtml(r.roads.slice(0, 6).join(' → ') || '（名称なし）')}</small>
-      </div>`).join('') + `<p class="note">ルート計算：${meta.costing === 'motorcycle' ? 'バイク' : '車'}用${escapeHtml(meta.note || '')}／所要時間は渋滞を含まない概算です。「主な道路」で想定どおりの道か確認してください。${routes.length === 1 && pts.length > 2 ? '経由地があるときは候補は1本だけです。' : ''}</p>`;
+        <small>主な道路：${escapeHtml(r.roads.slice(0, 6).join(' → ') || '（名称なし）')}<br>このルート上の登録オービス：${n}か所</small>
+      </div>`; }).join('') + `<p class="note">ルート計算：${meta.costing === 'motorcycle' ? 'バイク' : '車'}用${escapeHtml(meta.note || '')}／所要時間は渋滞を含まない概算です。「主な道路」で想定どおりの道か確認してください。</p>`;
   }
   $('routeList').addEventListener('click', e => { const el = e.target.closest('[data-sel]'); if (el) selectRoute(+el.dataset.sel); });
-  function selectRoute(i){ sel = i; lastIdx = 0; spoken.clear(); refreshRoutes(); document.querySelectorAll('.route').forEach((el, k) => el.classList.toggle('sel', k === i)); updateRemain(); }
+  function selectRoute(i){ sel = i; eng.setRoute(routes[sel], POINTS, layersOn); refreshRoutes(); document.querySelectorAll('.route').forEach((el, k) => el.classList.toggle('sel', k === i)); updateRemain(); }
   function fitRoute(){
     const r = routes[sel]; if (!r) return;
     const b = new maplibregl.LngLatBounds(); r.coords.forEach(p => b.extend([p.lon, p.lat]));
@@ -639,33 +840,22 @@ if (typeof window !== 'undefined' && window.maplibregl){
   async function requestWake(){ try { if ('wakeLock' in navigator){ wakeLock = await navigator.wakeLock.request('screen'); } } catch(e){ wakeLock = null; } }
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && (navOn || simOn)) requestWake(); });
 
-  // ---- 位置更新（GPS・再生共通） ----
+  // ---- 画面への反映 ----
   function setStatus(t){ $('status').textContent = t; }
-  function onFix(lat, lon, acc, gpsHeading, gpsSpeed, isSim){
-    const pos = { lat, lon };
-    let h = null, v = gpsSpeed;
-    if (gpsHeading != null && !isNaN(gpsHeading) && gpsSpeed != null && gpsSpeed >= MIN_SPEED) h = gpsHeading;
-    if (lastFix){
-      const moved = dist(lastFix.pos, pos), dt = Math.max((performance.now() - lastFix.t)/1000, .3);
-      if (moved >= 8){
-        if (h == null) h = bearing(lastFix.pos, pos);
-        if (v == null || isNaN(v)) v = moved / dt;
-        lastFix = { pos, t:performance.now() };
-      }
-    } else lastFix = { pos, t:performance.now() };
-    if (h == null) h = heading; heading = h;
-    speed = (v == null || isNaN(v)) ? speed : v;
-    me = pos;
-
-    // 自車
-    puck.setLngLat([lon, lat]); if (!puckAdded){ puck.addTo(map); puckAdded = true; }
+  const MODE_LABEL = { none:'待機中', free:'GPS', snap:'ルート上', dr:'推定位置（GPSなし）', lost:'位置不明' };
+  function render(res, isSim){
+    if (!res || !res.pos) return;
+    last = res;
+    const { pos, heading, speed, mode } = res;
+    puck.setLngLat([pos.lon, pos.lat]); if (!puckAdded){ puck.addTo(map); puckAdded = true; }
     if (heading != null) puck.setRotation(heading);
+    puckEl.classList.toggle('dr', mode === 'dr');
+    $('mode').textContent = MODE_LABEL[mode] || mode; $('mode').className = mode;
 
-    // カメラ（Googleマップ風：斜め後ろから追従）
     if (follow){
       const navView = (navOn || simOn) && mode3d;
       map.easeTo({
-        center:[lon, lat],
+        center:[pos.lon, pos.lat],
         zoom: navView ? (speed > 22 ? 16.3 : 17) : Math.max(map.getZoom(), 15),
         pitch: navView ? 60 : 0,
         bearing: navView && heading != null ? heading : (navView ? map.getBearing() : 0),
@@ -673,41 +863,44 @@ if (typeof window !== 'undefined' && window.maplibregl){
         duration: isSim ? 450 : 900, easing: t => t
       });
     }
-    $('speed').innerHTML = `${Math.round(speed * 3.6)}<small>km/h</small>`;
+    $('speed').innerHTML = `${Math.round(speed * 3.6)}<small>km/h${mode === 'dr' ? '（推定）' : ''}</small>`;
 
-    // ルート進捗と案内
     const r = routes[sel];
-    if (r && (navOn || simOn)){
-      const loc = locateOnRoute(r, pos, lastIdx); lastIdx = loc.idx;
-      const remain = r.cum[r.cum.length-1] - loc.along;
+    if (r && res.along != null && (navOn || simOn)){
+      const remain = r.cum[r.cum.length-1] - res.along;
       $('remain').innerHTML = `残り ${fmtDist(remain)}<small>　約${fmtTime(remain / Math.max(speed, 8))}</small>`;
-      const nm = nextManeuver(r, loc.along);
+      const nm = nextManeuver(r, res.along);
       if (nm){
         $('turn').classList.add('show');
         $('turnArrow').textContent = arrowFor(nm.m.type);
         $('turnDist').textContent = fmtDist(nm.d);
         $('turnText').textContent = nm.m.text;
-      }
-      if (loc.d > 80) setStatus(`ルートから外れています（約${Math.round(loc.d)}m）。「ルート」→「ルートを検索」で現在地から再検索できます`);
-      else setStatus(`${isSim ? '再生中' : 'GPS'}　精度${acc ? Math.round(acc)+'m' : '-'}　向き${heading == null ? '-' : Math.round(heading)+'°'}${wakeLock ? '　スリープ防止ON' : ''}`);
-      if (remain < 30 && !isSim){ speak('目的地周辺です。案内を終了します。'); stopNav(); }
-    } else if (!r) {
-      setStatus(`${isSim ? '再生中' : 'GPS'}　精度${acc ? Math.round(acc)+'m' : '-'}`);
+      } else $('turn').classList.remove('show');
+      if (remain < 30 && !isSim && mode === 'snap'){ speak('目的地周辺です。案内を終了します。'); stopNav(); }
     }
+    let st = `${isSim ? '再生' : 'GPS'}　精度${res.acc != null ? Math.round(res.acc)+'m' : '-'}　向き${heading == null ? '-' : Math.round(heading)+'°'}${wakeLock ? '　スリープ防止ON' : ''}`;
+    if (r && mode === 'free' && res.offBy > 0) st = `ルートから外れています（約${Math.round(res.offBy)}m）。「ルート」→「ルートを検索」で再検索できます`;
+    if (mode === 'dr') st = res.hold ? 'トンネル出口付近で止めています（GPSの復帰待ち）' : 'GPSが途切れています。ルート上を推定で進めています（60km/h以上で計算）';
+    if (mode === 'lost') st = 'GPSが長時間途切れています。GPSが戻ると自動で復帰します';
+    setStatus(st);
 
-    // オービス
-    const { alerts, next } = evaluate(pos, heading, isSim ? 20 : speed, POINTS, layersOn, orbisState);
-    if (next && next.d <= 1000){
+    if (res.event === 'resync') setStatus('GPSが戻りました。位置を合わせ直しました');
+
+    const nx = res.next;
+    if (nx && nx.d <= 1000 + (nx.point.unc || 0)){
       $('orbisAlert').classList.add('show');
-      $('oaTitle').textContent = `オービス あと${fmtDist(next.d)}`;
-      $('oaText').textContent = `${next.point.name}／制限${next.point.limit}km/h`;
+      const u = nx.point.unc >= 600 ? `（この先${fmtDist(nx.point.unc*2)}の区間内）` : `（±${nx.point.unc}m）`;
+      $('oaTitle').textContent = nx.d > 0 ? `オービス あと${fmtDist(nx.d)}` : 'オービス付近';
+      $('oaText').textContent = `${nx.point.name}／制限${nx.point.limit}km/h ${u}${mode === 'dr' ? '・推定位置' : ''}`;
     } else $('orbisAlert').classList.remove('show');
-    alerts.forEach(a => { beep(); setTimeout(() => speak(a.text), 400); });
+    res.alerts.forEach(a => { beep(); setTimeout(() => speak(a.text), 400); });
   }
   function updateRemain(){
     const r = routes[sel];
     $('remain').innerHTML = r ? `${fmtDist(r.length)}<small>　約${fmtTime(r.time)}</small>` : 'ルート未設定';
   }
+  function startDrTimer(){ if (!drTimer) drTimer = setInterval(() => render(eng.tick(performance.now(), POINTS, layersOn), simOn), 500); }
+  function stopDrTimer(){ if (drTimer && !navOn && !simOn){ clearInterval(drTimer); drTimer = null; } }
 
   // ---- GPS ----
   function startGps(addAsStart){
@@ -716,11 +909,12 @@ if (typeof window !== 'undefined' && window.maplibregl){
     watchId = navigator.geolocation.watchPosition(
       p => {
         if (simOn) return;
-        onFix(p.coords.latitude, p.coords.longitude, p.coords.accuracy, p.coords.heading, p.coords.speed, false);
-        if (addAsStart){ addAsStart = false; addPoint({ lat:p.coords.latitude, lon:p.coords.longitude, name:'現在地' }, 'start'); }
+        const c = p.coords;
+        render(eng.gps({ lat:c.latitude, lon:c.longitude, acc:c.accuracy, heading:c.heading, speed:c.speed, t:performance.now() }, POINTS, layersOn), false);
+        if (addAsStart){ addAsStart = false; addPoint({ lat:c.latitude, lon:c.longitude, name:'現在地' }, 'start'); }
       },
       e => setStatus(e.code === 1 ? '位置情報が許可されていません（iPhoneの設定→Chrome→位置情報）' : '位置情報エラー：' + e.message),
-      { enableHighAccuracy:true, maximumAge:1000, timeout:15000 }
+      { enableHighAccuracy:true, maximumAge:0, timeout:20000 }
     );
   }
 
@@ -728,43 +922,79 @@ if (typeof window !== 'undefined' && window.maplibregl){
   async function startNav(){
     unlockAudio(); speak(routes[sel] ? '案内を開始します。' : 'オービス警告を開始します。');
     navOn = true; follow = true; $('btnNav').classList.add('on'); $('btnNav').textContent = '終了'; $('btnFollow').classList.add('on');
-    await requestWake(); startGps(false);
+    eng.reset(); if (routes[sel]) eng.setRoute(routes[sel], POINTS, layersOn);
+    await requestWake(); startGps(false); startDrTimer();
     if (!routes[sel]) setStatus('ルートなし：現在地追従＋オービス警告のみ');
   }
   function stopNav(){
     navOn = false; $('btnNav').classList.remove('on'); $('btnNav').textContent = 'ナビ開始'; $('turn').classList.remove('show');
     if (!simOn && wakeLock){ wakeLock.release().catch(() => {}); wakeLock = null; }
+    stopDrTimer();
     map.easeTo({ pitch:0, bearing:0, padding:{ top:0, bottom:0, left:0, right:0 }, duration:600 });
   }
   $('btnNav').onclick = () => navOn ? stopNav() : startNav();
 
-  // ---- 再生（ルート上を走ったことにする） ----
+  // ---- 再生（ルート上を走ったことにする。GPSの途切れ・ブレも再現） ----
+  function gauss(){ let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
   function startSim(){
     const r = routes[sel]; if (!r){ setStatus('先にルートを検索してください'); return; }
     unlockAudio(); speak('ルートの再生を開始します。');
-    simOn = true; follow = true; simS = 0; lastFix = null; lastIdx = 0; Object.keys(orbisState).forEach(k => delete orbisState[k]);
+    simOn = true; follow = true; simS = 0;
+    eng.reset(); eng.setRoute(r, POINTS, layersOn);
     $('btnSim').classList.add('on'); $('btnSim').textContent = '再生停止'; $('btnFollow').classList.add('on');
-    requestWake();
-    const tick = 0.5; // 秒
+    requestWake(); startDrTimer();
+    const tick = 0.5;
     simTimer = setInterval(() => {
-      const mult = +$('optSimSpeed').value, v = 16.7 * mult; // 60km/h基準
+      const mult = +$('optSimSpeed').value, v = 16.7 * mult;
       simS += v * tick;
       const p = pointAt(r, simS);
-      onFix(p.pos.lat, p.pos.lon, 5, p.heading, 16.7, true);
-      if (p.end){ stopSim(); speak('再生を終了しました。'); }
+      if (p.end){ stopSim(); speak('再生を終了しました。'); return; }
+      if ($('optSimDrop').checked && inYamateTunnel(p.pos)) return; // トンネル内：GPSなし
+      let lat = p.pos.lat, lon = p.pos.lon;
+      if ($('optSimNoise').checked){ lat += gauss()*8/110540; lon += gauss()*8/(111320*Math.cos(rad(lat))); }
+      render(eng.gps({ lat, lon, acc:10, heading:p.heading, speed:v, t:performance.now() }, POINTS, layersOn), true);
     }, tick * 1000);
   }
   function stopSim(){
-    simOn = false; clearInterval(simTimer); simTimer = null;
-    $('btnSim').classList.remove('on'); $('btnSim').textContent = '再生'; lastFix = null;
+    simOn = false; clearInterval(simTimer); simTimer = null; stopDrTimer();
+    $('btnSim').classList.remove('on'); $('btnSim').textContent = '再生';
     if (!navOn){ $('turn').classList.remove('show'); $('orbisAlert').classList.remove('show');
       map.easeTo({ pitch:0, bearing:0, padding:{ top:0, bottom:0, left:0, right:0 }, duration:600 }); }
   }
   $('btnSim').onclick = () => simOn ? stopSim() : startSim();
 
+  // ---- オービス位置の修正 ----
+  let editOn = false, editMarkers = [];
+  function setEdit(on){
+    editOn = on; editMarkers.forEach(m => m.remove()); editMarkers = [];
+    if (map.getLayer('orbis-pt')) map.setLayoutProperty('orbis-pt', 'visibility', on ? 'none' : 'visible');
+    if (!on) return;
+    POINTS.filter(p => layersOn[p.layer]).forEach(p => {
+      const el = document.createElement('div'); el.className = 'editpin'; el.style.background = LAYERS[p.layer].color;
+      const m = new maplibregl.Marker({ element:el, draggable:true }).setLngLat([p.lon, p.lat])
+        .setPopup(new maplibregl.Popup({ maxWidth:'270px' }).setHTML(`<div style="color:#111;font-size:13px;line-height:1.6">${pointHtml(p)}<br><b>ドラッグで移動できます</b></div>`)).addTo(map);
+      m.on('dragend', () => {
+        const ll = m.getLngLat(); p.lat = +ll.lat.toFixed(6); p.lon = +ll.lng.toFixed(6); p.edited = true;
+        overrides[p.id] = { lat:p.lat, lon:p.lon, name:p.name }; store.set('pinOverrides', overrides);
+        refreshOrbis(); if (routes[sel]) eng.setRoute(routes[sel], POINTS, layersOn);
+        setStatus(`${p.name} の位置を保存しました（この端末）`);
+      });
+      editMarkers.push(m);
+    });
+    setStatus('修正モード：ピンをドラッグして正しい位置に動かしてください');
+  }
+  $('optEdit').onchange = e => { setEdit(e.target.checked); if (e.target.checked) $('menuSheet').classList.remove('open'); };
+  $('btnExport').onclick = async () => {
+    const box = $('exportBox'); const keys = Object.keys(overrides);
+    box.hidden = false;
+    box.value = keys.length ? JSON.stringify(overrides, null, 1) : '修正したピンはまだありません。';
+    try { await navigator.clipboard.writeText(box.value); setStatus('修正データをコピーしました'); } catch(e){ box.select(); setStatus('表示された内容を長押ししてコピーしてください'); }
+  };
+  $('btnResetEdit').onclick = () => { store.del('pinOverrides'); location.reload(); };
+
   // ---- その他ボタン ----
   $('btnFollow').classList.add('on');
-  $('btnFollow').onclick = () => { follow = !follow; $('btnFollow').classList.toggle('on', follow); if (follow && me) onFix(me.lat, me.lon, null, heading, speed, simOn); };
+  $('btnFollow').onclick = () => { follow = !follow; $('btnFollow').classList.toggle('on', follow); if (follow && last) render({ ...last, alerts:[], event:null }, simOn); };
   map.on('dragstart', () => { follow = false; $('btnFollow').classList.remove('on'); });
   $('btn3d').classList.add('on');
   $('btn3d').onclick = () => { mode3d = !mode3d; $('btn3d').classList.toggle('on', mode3d); if (!mode3d) map.easeTo({ pitch:0, bearing:0, padding:{ top:0, bottom:0, left:0, right:0 } }); };
@@ -776,13 +1006,17 @@ if (typeof window !== 'undefined' && window.maplibregl){
 
   $('layerRows').innerHTML = Object.keys(LAYERS).map(k => `<div class="row"><span><span style="color:${LAYERS[k].color}">●</span> ${LAYERS[k].name}</span>
     <input type="checkbox" data-layer="${k}" ${layersOn[k] ? 'checked' : ''}></div>`).join('');
-  $('layerRows').addEventListener('change', e => { const k = e.target.dataset.layer; if (!k) return; layersOn[k] = e.target.checked; store.set('layersOn', layersOn); refreshOrbis(); });
+  $('layerRows').addEventListener('change', e => {
+    const k = e.target.dataset.layer; if (!k) return; layersOn[k] = e.target.checked; store.set('layersOn', layersOn);
+    refreshOrbis(); if (routes[sel]) eng.setRoute(routes[sel], POINTS, layersOn); if (editOn) setEdit(true);
+  });
 
   renderPts();
 }
 
 /* Nodeでのテスト用 */
-if (typeof module !== 'undefined') module.exports = { evaluate, dist, bearing, angDiff, decodePolyline6, buildRoute, locateOnRoute, nextManeuver, pointAt, POINTS, LAYERS, PRESETS };
+if (typeof module !== 'undefined') module.exports = { evaluate, dist, bearing, angDiff, decodePolyline6, buildRoute, locateOnRoute, nextManeuver, pointAt,
+  pointsOnRoute, createEngine, inYamateTunnel, routeHeadingAt, streetsAt, distToLine, APPROACH, POINTS, LAYERS, PRESETS, cleanText, roadLabel };
 </script>
 </body>
 </html>
