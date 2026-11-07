@@ -439,6 +439,8 @@ function evaluate(pos, heading, speed, points, layersOn, state){
     if (!sameDir || !ahead) continue;
     // 手前の車線の線から外れていれば、並走する別の道路とみなす
     if (APPROACH[p.id] && distToLine(pos, APPROACH[p.id]) > APPROACH_TOL) continue;
+    // ここに来るのはGPSが取れているとき＝地上。トンネル内のオービスは真上の一般道（山手通り）なので警告しない
+    if (inYamateTunnel(p) && inYamateTunnel(pos)) continue;
     if (!next || d < next.d) next = { point:p, d };
     pushWarn(p, d - unc, st, alerts);
   }
