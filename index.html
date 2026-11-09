@@ -291,6 +291,9 @@
   <button class="wide" id="btnMemoIdle">改善メモを残す</button>
   <h3>オービス表示</h3>
   <div id="layerRows"></div>
+  <h3>二輪の通行規制</h3>
+  <div class="row"><span>二輪通行禁止の道路を赤く表示<br><small id="moStatus" style="color:var(--sub)">拡大すると表示します</small></span><input type="checkbox" id="optMotoNo" checked></div>
+  <p class="note">OpenStreetMapに登録されている「二輪通行止め」「時間帯規制」などの道路を表示します。登録されていない規制は表示されないため、赤くない道路が通れるとは限りません。現地の標識が優先です。</p>
   <h3>速度取締り（警視庁の月次公表）</h3>
   <div class="row"><span>取締り実施エリアの道路を赤く表示<br><small id="spdMonth" style="color:var(--sub)"></small></span><input type="checkbox" id="optSpeedArea" checked></div>
   <p class="note">警視庁「速度取締実施場所一覧」の場所（丁目）とその周りの道路を赤く塗ります。その月に実施予定の場所で、毎日行われるわけではありません。丁目の境界が無い場所は、地点の周り300mで表しています。</p>
@@ -525,6 +528,38 @@ function pointAt(route, s){
 function routeHeadingAt(route, s){
   const a = pointAt(route, Math.max(0, s - 15)).pos, b = pointAt(route, s + 25).pos;
   return dist(a, b) > 3 ? bearing(a, b) : pointAt(route, s).heading;
+}
+
+/* =========================================================
+   高速料金の概算（首都高のみ）
+   首都高 2026年10月改定：普通車ETC＝(150円＋32.472円×km)×1.1、下限300円・上限2,130円（55km）
+   二輪・軽（ETC）は下限280円・上限1,740円。1kmあたり単価は未公表のため、上限額の比率（1740/2130）で概算
+   ========================================================= */
+const SHUTOKO = { term:150, perKm:32.472, tax:1.1, kRatio:1740/2130, min:280, max:1740, capKm:55 };
+function shutokoToll(km){
+  const k = Math.min(km, SHUTOKO.capKm);
+  const yen = Math.round((SHUTOKO.term + SHUTOKO.perKm * k) * SHUTOKO.tax * SHUTOKO.kRatio / 10) * 10;
+  return Math.max(SHUTOKO.min, Math.min(SHUTOKO.max, yen));
+}
+const isShutoko = names => (names || []).some(n => /首都高/.test(n) || /^(C1|C2|B|K\d|S\d|\d{1,2})$/.test(n) && names.some(m => /首都高/.test(m)));
+const TOLL_RE = /首都高|高速|自動車道|有料|第三京浜|第二京浜道路|京葉道路|横浜新道|保土ヶ谷バイパス|アクアライン/;
+/* ルート上の有料道路：首都高は入ってから出るまでを1回として概算、それ以外は名前だけ返す */
+function routeTolls(route){
+  const trips = []; const others = [];
+  let cur = null;
+  route.maneuvers.forEach((m, i) => {
+    const a = m.begin, b = i + 1 < route.maneuvers.length ? route.maneuvers[i+1].begin : route.coords.length - 1;
+    const km = (route.cum[Math.min(b, route.cum.length-1)] - route.cum[Math.min(a, route.cum.length-1)]) / 1000;
+    const names = m.streets || [];
+    if (isShutoko(names)){ if (!cur){ cur = { km:0 }; trips.push(cur); } cur.km += km; }
+    else {
+      if (km > 0.4) cur = null;                     // 短い区間（JCT内の別名など）では途切れとみなさない
+      const nm = names.find(n => TOLL_RE.test(n) && /[\u3040-\u9fff]/.test(n));
+      if (nm && !others.includes(nm)) others.push(nm);
+    }
+  });
+  trips.forEach(t => t.yen = shutokoToll(t.km));
+  return { shutoko:trips, total:trips.reduce((s, t) => s + t.yen, 0), others };
 }
 
 /* 次の案内 */
@@ -793,7 +828,7 @@ if (typeof window !== 'undefined' && window.maplibregl){
   Object.assign(layersOn, store.get('layersOn', {}));
 
   // 設定の復元
-  const prefIds = { headingUp:'optHeadingUp', idleWarn:'optIdleWarn', reroute:'optReroute', rideLog:'optRideLog', speedArea:'optSpeedArea' };
+  const prefIds = { headingUp:'optHeadingUp', idleWarn:'optIdleWarn', reroute:'optReroute', rideLog:'optRideLog', speedArea:'optSpeedArea', motoNo:'optMotoNo' };
   const prefs = store.get('prefs', {});
   Object.entries(prefIds).forEach(([k, id]) => { if (prefs[k] != null) $(id).checked = prefs[k]; $(id).addEventListener('change', () => { prefs[k] = $(id).checked; store.set('prefs', prefs); }); });
   const P = k => $(prefIds[k]).checked;
@@ -850,6 +885,7 @@ if (typeof window !== 'undefined' && window.maplibregl){
     map.setLayoutProperty('orbis-pt', 'visibility', editOn ? 'none' : 'visible');
     updateAcc();
     addSpeedLayers();
+    addMotoLayers();
   }
   map.on('load', addLayers);
   map.on('styledata', () => { if (map.isStyleLoaded()) addLayers(); });
@@ -1360,8 +1396,12 @@ if (typeof window !== 'undefined' && window.maplibregl){
     const via = r.roads.slice(0, 4).join(' → ') || '一般道';
     renderAvoid(r);
     const spd = speedAreasOnRoute(r);
+    const tl = routeTolls(r);
+    let tollTxt = '';
+    if (tl.shutoko.length) tollTxt = `<br>高速料金（二輪ETC・概算）：首都高 約${tl.total.toLocaleString()}円${tl.shutoko.length > 1 ? `（${tl.shutoko.length}回乗り降り）` : ''}`;
+    if (tl.others.length) tollTxt += `${tollTxt ? '／' : '<br>'}${escapeHtml(tl.others.slice(0, 2).join('・'))}は料金未対応`;
     $('pvInfo').dataset.spd = spd.length ? `／取締り実施エリア ${spd.length}か所` : '';
-    $('pvInfo').innerHTML = `${escapeHtml(via)}<br>到着予定 ${clock(r.time)}／ルート上のオービス ${n}か所${$('pvInfo').dataset.spd || ''}${routeMeta && routeMeta.costing !== 'motorcycle' ? '／車用ルート' : ''}${$('optLoop').checked ? '／周回' : ''}`;
+    $('pvInfo').innerHTML = `${escapeHtml(via)}<br>到着予定 ${clock(r.time)}／ルート上のオービス ${n}か所${$('pvInfo').dataset.spd || ''}${routeMeta && routeMeta.costing !== 'motorcycle' ? '／車用ルート' : ''}${$('optLoop').checked ? '／周回' : ''}${tollTxt}`;
     requestAnimationFrame(layoutFabs);
   }
   $('pvChips').addEventListener('click', e => { const b = e.target.closest('[data-sel]'); if (b) selectRoute(+b.dataset.sel); });
@@ -1538,6 +1578,71 @@ if (typeof window !== 'undefined' && window.maplibregl){
   }
 
   // =========================================================
+  //  追加機能④：二輪通行禁止の道路（OpenStreetMap／Overpass APIから表示中の範囲を取得）
+  // =========================================================
+  const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
+  const motoCells = new Map();            // 0.02度四方のマス → 取得済みの道路
+  let motoFC = { type:'FeatureCollection', features:[] }, motoTimer = null, motoBusy = false;
+  function motoQuery(s, w, n, e){
+    const bb = `${s},${w},${n},${e}`;
+    return `[out:json][timeout:25];(way["highway"]["motorcycle"~"^(no|private)$"](${bb});way["highway"]["motorcycle:conditional"~"no"](${bb});` +
+      `way["highway"]["motor_vehicle"~"^(no|private)$"]["motorcycle"!~"^(yes|designated|permissive)$"]["highway"!~"^(footway|path|cycleway|pedestrian|steps|track|bridleway)$"](${bb});` +
+      `way["highway"]["motor_vehicle:conditional"~"no"]["motorcycle"!~"^(yes|designated)$"](${bb}););out tags geom;`;
+  }
+  function motoReason(t){
+    if (t['motorcycle:conditional']) return '二輪：' + t['motorcycle:conditional'].replace(/no\s*@/g, '通行止め ').replace(/[()]/g, '');
+    if (t['motor_vehicle:conditional']) return '自動車：' + t['motor_vehicle:conditional'].replace(/no\s*@/g, '通行止め ').replace(/[()]/g, '');
+    if (t.motorcycle) return '二輪通行止め';
+    return '自動車通行止め（二輪も不可）';
+  }
+  function motoToFeatures(js){
+    return (js.elements || []).filter(el => el.type === 'way' && el.geometry && el.geometry.length > 1).map(el => ({ type:'Feature',
+      properties:{ id:el.id, name:el.tags.name || '', why:motoReason(el.tags), cond: (el.tags['motorcycle:conditional'] || el.tags['motor_vehicle:conditional']) ? 1 : 0 },
+      geometry:{ type:'LineString', coordinates: el.geometry.map(g => [+g.lon.toFixed(6), +g.lat.toFixed(6)]) } }));
+  }
+  async function fetchMoto(){
+    if (!P('motoNo') || motoBusy) return;
+    if (map.getZoom() < 13){ $('moStatus').textContent = '拡大すると表示します'; return; }
+    const b = map.getBounds(), G = 0.02;
+    const need = [];
+    for (let la = Math.floor(b.getSouth() / G); la <= Math.floor(b.getNorth() / G); la++)
+      for (let lo = Math.floor(b.getWest() / G); lo <= Math.floor(b.getEast() / G); lo++){ const k = la + ':' + lo; if (!motoCells.has(k)) need.push([k, la * G, lo * G]); }
+    if (!need.length) return;
+    motoBusy = true; $('moStatus').textContent = '規制情報を取得中…';
+    try {
+      const s = Math.min(...need.map(x => x[1])), w = Math.min(...need.map(x => x[2])), n = Math.max(...need.map(x => x[1])) + G, e = Math.max(...need.map(x => x[2])) + G;
+      let js = null, lastErr = null;
+      for (const url of OVERPASS){
+        try { const r = await fetch(url, { method:'POST', body:'data=' + encodeURIComponent(motoQuery(s, w, n, e)), headers:{ 'Content-Type':'application/x-www-form-urlencoded' } });
+          if (!r.ok) throw new Error('HTTP ' + r.status); js = await r.json(); break; } catch(err){ lastErr = err; }
+      }
+      if (!js) throw lastErr || new Error('取得失敗');
+      const seen = new Set(motoFC.features.map(f => f.properties.id));
+      motoToFeatures(js).forEach(f => { if (!seen.has(f.properties.id)){ motoFC.features.push(f); seen.add(f.properties.id); } });
+      need.forEach(x => motoCells.set(x[0], true));
+      const src = map.getSource('moto-no'); if (src) src.setData(motoFC);
+      $('moStatus').textContent = `表示中の範囲：${motoFC.features.length}本（OpenStreetMap）`;
+    } catch(e){ $('moStatus').textContent = '規制情報を取得できませんでした：' + e.message; }
+    finally { motoBusy = false; }
+  }
+  function addMotoLayers(){
+    if (!map.getSource('moto-no')) map.addSource('moto-no', { type:'geojson', data:motoFC });
+    if (!map.getLayer('moto-no')) map.addLayer({ id:'moto-no', type:'line', source:'moto-no', minzoom:12,
+      layout:{ 'line-cap':'round' },
+      paint:{ 'line-color':['case', ['==', ['get','cond'], 1], '#f57c00', '#b71c1c'], 'line-width':['interpolate', ['linear'], ['zoom'], 12, 2.5, 17, 8], 'line-opacity':.85,
+        'line-dasharray':[1.2, 0.8] } }, map.getLayer('route-alt') ? 'route-alt' : undefined);
+    map.setLayoutProperty('moto-no', 'visibility', P('motoNo') ? 'visible' : 'none');
+    fetchMoto();
+  }
+  map.on('moveend', () => { clearTimeout(motoTimer); motoTimer = setTimeout(fetchMoto, 700); });
+  $('optMotoNo').addEventListener('change', addMotoLayers);
+  map.on('click', 'moto-no', e => {
+    const f = e.features[0].properties;
+    new maplibregl.Popup({ maxWidth:'260px' }).setLngLat(e.lngLat).setHTML(`<div style="color:#111;font-size:13px;line-height:1.6"><b>二輪の通行規制</b><br>${escapeHtml(f.name || '名称なし')}<br>${escapeHtml(f.why)}<br><span style="color:#666">出典：OpenStreetMap（現地の標識が優先）</span></div>`).addTo(map);
+  });
+  window.__orbisNavi.motoTest = js => { motoFC.features = motoToFeatures(js); const src = map.getSource('moto-no'); if (src) src.setData(motoFC); return motoFC.features.length; };
+
+  // =========================================================
   //  追加機能①：高速道路を路線ごとに避ける（本線だけを除外し、交差する一般道は通れるまま）
   // =========================================================
   const HWY_RE = /首都高|高速|自動車道|有料|第三京浜|第二京浜道路|京葉道路|横浜新道|保土ヶ谷バイパス|アクアライン/;
@@ -1700,7 +1805,8 @@ if (typeof window !== 'undefined' && window.maplibregl){
 
 /* Nodeでのテスト用 */
 if (typeof module !== 'undefined') module.exports = { evaluate, dist, bearing, angDiff, decodePolyline6, buildRoute, locateOnRoute, nextManeuver, pointAt,
-  pointsOnRoute, createEngine, inYamateTunnel, routeHeadingAt, streetsAt, distToLine, APPROACH, POINTS, LAYERS, PRESETS, cleanText, roadLabel };
+  pointsOnRoute, createEngine, inYamateTunnel, routeHeadingAt, streetsAt, distToLine, APPROACH, POINTS, LAYERS, PRESETS, cleanText, roadLabel,
+  shutokoToll, routeTolls };
 </script>
 </body>
 </html>

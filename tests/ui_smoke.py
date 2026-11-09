@@ -50,6 +50,7 @@ async def main():
             await pg.wait_for_timeout(800)
             if (await st())['state'] == 'preview': break
         ok((await st())['state'] == 'preview' and await pg.is_visible('#btnStart'), 'ルート確認画面と「開始」ボタンが出る')
+        ok('首都高 約' in await pg.inner_text('#pvInfo') or '首都高' not in await pg.inner_text('#pvInfo'), '首都高を使うルートでは料金の概算が出る')
         chip = pg.locator('#pvAvoid [data-avoid]')
         if await chip.count():
             name = await chip.first.get_attribute('data-avoid')
@@ -105,6 +106,12 @@ async def main():
         ok(rides and len(rides[-1]['fixes']) > 5 and any(e['type'] == 'memo' for e in rides[-1]['events']), '走行記録とメモが保存される')
         played = [e for r in rides for e in r['events'] if e['type'] == 'speak' and e.get('played')]
         ok(not played, '「鳴らさない」設定（初期値）では音を出さない')
+
+        print('5. 二輪通行禁止の表示（模擬データ）')
+        n = await pg.evaluate("""() => __orbisNavi.motoTest({elements:[{type:'way',id:1,tags:{highway:'residential',name:'テスト通り',motorcycle:'no'},geometry:[{lat:35.75,lon:139.80},{lat:35.751,lon:139.801}]},
+          {type:'way',id:2,tags:{highway:'tertiary','motorcycle:conditional':'no @ (22:00-06:00)'},geometry:[{lat:35.752,lon:139.80},{lat:35.753,lon:139.801}]}]})""")
+        ok(n == 2 and await pg.evaluate("() => !!__orbisNavi.map.getLayer('moto-no')"), '規制のある道路が地図に描かれる')
+        ok(await pg.evaluate("() => !!__orbisNavi.map.getLayer('spd-roads')"), '速度取締りエリアの道路が地図に描かれる')
 
         ok(not errs, 'ページのエラーがない' + ('' if not errs else '：' + errs[0][:120]))
         await b.close()

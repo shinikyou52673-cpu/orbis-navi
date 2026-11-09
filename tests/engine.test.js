@@ -122,6 +122,21 @@ for (const layer of layers){
 }
 function rad(d){ return d*Math.PI/180; }
 
+/* ---- 2b. 首都高の料金（概算） ---- */
+ok(M.shutokoToll(1) === 280, '首都高：短距離は下限280円');
+ok(M.shutokoToll(55) === 1740 && M.shutokoToll(90) === 1740, '首都高：55km以上は上限1,740円');
+ok(Math.round((150 + 32.472 * 20) * 1.1 / 10) * 10 === 880, '首都高：普通車20kmが公表値880円と一致（式の確認）');
+{
+  const j = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'c2in.json'), 'utf8'));
+  const coords = j.shape.map(([lat, lon]) => ({ lat, lon })); const cum = [0];
+  for (let i = 1; i < coords.length; i++) cum.push(cum[i-1] + M.dist(coords[i-1], coords[i]));
+  const half = Math.floor(coords.length / 2);
+  const R = { coords, cum, maneuvers:[{ begin:0, streets:['C2','首都高速中央環状線'] }, { begin:half, streets:['山手通り'] }, { begin:half + 40, streets:['C2','首都高速中央環状線'] }] };
+  const tl = M.routeTolls(R);
+  ok(tl.shutoko.length === 2, `首都高を途中で降りて乗り直すと2回分になる（${tl.shutoko.length}回）`);
+  ok(tl.total === tl.shutoko.reduce((s, x) => s + M.shutokoToll(x.km), 0), '首都高：合計が各回の合計と一致');
+}
+
 /* ---- 3. 速度取締りエリアのデータ（警視庁 月次） ---- */
 {
   const f = path.join(__dirname, '..', 'data', 'speed', 'latest.json');
