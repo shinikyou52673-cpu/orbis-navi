@@ -291,6 +291,9 @@
   <button class="wide" id="btnMemoIdle">改善メモを残す</button>
   <h3>オービス表示</h3>
   <div id="layerRows"></div>
+  <h3>速度取締り（警視庁の月次公表）</h3>
+  <div class="row"><span>取締り実施エリアの道路を赤く表示<br><small id="spdMonth" style="color:var(--sub)"></small></span><input type="checkbox" id="optSpeedArea" checked></div>
+  <p class="note">警視庁「速度取締実施場所一覧」の場所（丁目）とその周りの道路を赤く塗ります。その月に実施予定の場所で、毎日行われるわけではありません。丁目の境界が無い場所は、地点の周り300mで表しています。</p>
   <h3>再生（シミュ）</h3>
   <div class="row"><span>速さ</span>
     <select id="optSimSpeed">
@@ -790,7 +793,7 @@ if (typeof window !== 'undefined' && window.maplibregl){
   Object.assign(layersOn, store.get('layersOn', {}));
 
   // 設定の復元
-  const prefIds = { headingUp:'optHeadingUp', idleWarn:'optIdleWarn', reroute:'optReroute', rideLog:'optRideLog' };
+  const prefIds = { headingUp:'optHeadingUp', idleWarn:'optIdleWarn', reroute:'optReroute', rideLog:'optRideLog', speedArea:'optSpeedArea' };
   const prefs = store.get('prefs', {});
   Object.entries(prefIds).forEach(([k, id]) => { if (prefs[k] != null) $(id).checked = prefs[k]; $(id).addEventListener('change', () => { prefs[k] = $(id).checked; store.set('prefs', prefs); }); });
   const P = k => $(prefIds[k]).checked;
@@ -846,6 +849,7 @@ if (typeof window !== 'undefined' && window.maplibregl){
       paint:{ 'circle-radius':['case',['==',['get','ann'],1],6,9], 'circle-color':['get','color'], 'circle-stroke-color':'#fff', 'circle-stroke-width':2, 'circle-pitch-alignment':'map' } });
     map.setLayoutProperty('orbis-pt', 'visibility', editOn ? 'none' : 'visible');
     updateAcc();
+    addSpeedLayers();
   }
   map.on('load', addLayers);
   map.on('styledata', () => { if (map.isStyleLoaded()) addLayers(); });
@@ -1091,7 +1095,7 @@ if (typeof window !== 'undefined' && window.maplibregl){
     setPuck(res.pos, h, res.mode);
     updateAcc();
     if (state === 'nav') navUpdate(res, isSim);
-    if (state === 'nav' || P('idleWarn')) orbisUpdate(res);
+    if (state === 'nav' || P('idleWarn')){ orbisUpdate(res); speedCheck(res.pos); }
     else $('orbisAlert').classList.remove('show');
   }
   function startDrTimer(){ if (!drTimer) drTimer = setInterval(() => handle(eng.tick(performance.now(), POINTS, layersOn), simOn), 500); }
@@ -1355,7 +1359,9 @@ if (typeof window !== 'undefined' && window.maplibregl){
     const n = pointsOnRoute(r, POINTS, layersOn).filter(o => o.point.type === 'orbis').length;
     const via = r.roads.slice(0, 4).join(' → ') || '一般道';
     renderAvoid(r);
-    $('pvInfo').innerHTML = `${escapeHtml(via)}<br>到着予定 ${clock(r.time)}／ルート上のオービス ${n}か所${routeMeta && routeMeta.costing !== 'motorcycle' ? '／車用ルート' : ''}${$('optLoop').checked ? '／周回' : ''}`;
+    const spd = speedAreasOnRoute(r);
+    $('pvInfo').dataset.spd = spd.length ? `／取締り実施エリア ${spd.length}か所` : '';
+    $('pvInfo').innerHTML = `${escapeHtml(via)}<br>到着予定 ${clock(r.time)}／ルート上のオービス ${n}か所${$('pvInfo').dataset.spd || ''}${routeMeta && routeMeta.costing !== 'motorcycle' ? '／車用ルート' : ''}${$('optLoop').checked ? '／周回' : ''}`;
     requestAnimationFrame(layoutFabs);
   }
   $('pvChips').addEventListener('click', e => { const b = e.target.closest('[data-sel]'); if (b) selectRoute(+b.dataset.sel); });
@@ -1464,6 +1470,72 @@ if (typeof window !== 'undefined' && window.maplibregl){
     const k = e.target.dataset.layer; if (!k) return; layersOn[k] = e.target.checked; store.set('layersOn', layersOn);
     refreshOrbis(); if (routes[sel]) eng.setRoute(routes[sel], POINTS, layersOn); if (editOn) setEdit(true);
   });
+
+  // =========================================================
+  //  追加機能②：速度取締り実施エリア（警視庁の月次PDFから作ったデータ）の道路を赤く
+  // =========================================================
+  let speedData = null, speedLoading = false;
+  async function loadSpeed(){
+    if (speedData || speedLoading) return speedData;
+    speedLoading = true;
+    try {
+      const res = await fetch('data/speed/latest.json', { cache:'no-cache' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      speedData = await res.json();
+      speedData.areaFC = { type:'FeatureCollection', features: speedData.areas.map(a => ({ type:'Feature', properties:{ id:a.id }, geometry:a.geom })) };
+      $('spdMonth').textContent = `${speedData.month.replace('-', '年')}月分・${speedData.areas.length}か所`;
+    } catch(e){ $('spdMonth').textContent = '読み込めませんでした：' + e.message; }
+    finally { speedLoading = false; }
+    return speedData;
+  }
+  async function addSpeedLayers(){
+    if (!P('speedArea')){ ['spd-roads', 'spd-line', 'spd-fill'].forEach(id => { if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none'); }); return; }
+    const d = await loadSpeed(); if (!d || !map.isStyleLoaded()) return;
+    const before = map.getLayer('route-alt') ? 'route-alt' : undefined;
+    if (!map.getSource('spd-area')) map.addSource('spd-area', { type:'geojson', data:d.areaFC });
+    if (!map.getSource('spd-roads')) map.addSource('spd-roads', { type:'geojson', data:d.roads });
+    if (!map.getLayer('spd-fill')) map.addLayer({ id:'spd-fill', type:'fill', source:'spd-area', minzoom:10, paint:{ 'fill-color':'#e53935', 'fill-opacity':.07 } }, before);
+    if (!map.getLayer('spd-line')) map.addLayer({ id:'spd-line', type:'line', source:'spd-area', minzoom:10, paint:{ 'line-color':'#e53935', 'line-width':1.2, 'line-opacity':.6, 'line-dasharray':[2, 2] } }, before);
+    if (!map.getLayer('spd-roads')) map.addLayer({ id:'spd-roads', type:'line', source:'spd-roads', minzoom:10,
+      layout:{ 'line-cap':'round', 'line-join':'round' },
+      paint:{ 'line-color':'#e53935', 'line-opacity':.62,
+        'line-width':['interpolate', ['linear'], ['zoom'], 10, ['match', ['get','c'], ['trunk','primary'], 2.5, 1], 16, ['match', ['get','c'], ['trunk','primary'], 9, ['secondary','tertiary'], 6, 3.5]] } }, before);
+    ['spd-roads', 'spd-line', 'spd-fill'].forEach(id => map.setLayoutProperty(id, 'visibility', 'visible'));
+  }
+  $('optSpeedArea').addEventListener('change', addSpeedLayers);
+  map.on('click', 'spd-fill', e => {
+    if (!speedData) return;
+    const a = speedData.areas.find(x => x.id === e.features[0].properties.id); if (!a) return;
+    const how = { polygon:'丁目の範囲', town:'町の範囲（丁目の境界なし）', point:'地点の周り300m（境界なし）' }[a.method] || a.method;
+    new maplibregl.Popup({ maxWidth:'260px' }).setLngLat(e.lngLat).setHTML(`<div style="color:#111;font-size:13px;line-height:1.6"><b>速度取締り実施場所（${speedData.month.replace('-', '年')}月）</b><br>${escapeHtml(a.route)}<br>${escapeHtml(a.place)}（${escapeHtml(a.station)}署）<br><span style="color:#666">${how}／出典：警視庁</span></div>`).addTo(map);
+  });
+  // 点が範囲内か（ルート確認・案内中の表示用）
+  function inPoly(pt, geom){
+    const polys = geom.type === 'Polygon' ? [geom.coordinates] : geom.coordinates;
+    return polys.some(rings => {
+      let inside = false; const ring = rings[0];
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++){
+        const [xi, yi] = ring[i], [xj, yj] = ring[j];
+        if (((yi > pt.lat) !== (yj > pt.lat)) && (pt.lon < (xj - xi) * (pt.lat - yi) / (yj - yi) + xi)) inside = !inside;
+      }
+      return inside;
+    });
+  }
+  function speedAreasOnRoute(r){
+    if (!speedData || !P('speedArea')) return [];
+    const hit = new Set();
+    for (let s = 0; s < r.cum[r.cum.length-1]; s += 60){ const p = pointAt(r, s).pos; for (const a of speedData.areas) if (!hit.has(a.id) && inPoly(p, a.geom)) hit.add(a.id); }
+    return speedData.areas.filter(a => hit.has(a.id));
+  }
+  let speedHere = null;
+  function speedCheck(pos){
+    if (!speedData || !P('speedArea') || !pos) return;
+    const a = speedData.areas.find(x => inPoly(pos, x.geom)) || null;
+    if ((a && a.id) !== (speedHere && speedHere.id)){
+      speedHere = a;
+      if (a){ toast(`取締り実施エリア（今月）：${a.route}・${a.place.replace('付近', '')}`, 5000); logEvent('speedarea', { route:a.route }); }
+    }
+  }
 
   // =========================================================
   //  追加機能①：高速道路を路線ごとに避ける（本線だけを除外し、交差する一般道は通れるまま）

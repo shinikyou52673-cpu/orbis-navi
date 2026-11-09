@@ -122,6 +122,20 @@ for (const layer of layers){
 }
 function rad(d){ return d*Math.PI/180; }
 
+/* ---- 3. 速度取締りエリアのデータ（警視庁 月次） ---- */
+{
+  const f = path.join(__dirname, '..', 'data', 'speed', 'latest.json');
+  ok(fs.existsSync(f), 'data/speed/latest.json がない');
+  if (fs.existsSync(f)){
+    const d = JSON.parse(fs.readFileSync(f, 'utf8'));
+    ok(/^\d{4}-\d{2}$/.test(d.month), '取締りデータの month が「年-月」形式でない');
+    ok(Array.isArray(d.areas) && d.areas.length >= 10, `取締りエリアが少なすぎる（${(d.areas || []).length}か所）`);
+    ok(d.roads && d.roads.features && d.roads.features.length > 0, '取締りエリアの道路が空');
+    for (const a of d.areas || []) ok(a.geom && /Polygon/.test(a.geom.type) && a.route && a.place, `取締りエリア ${a.id} の形が不正`);
+    const size = fs.statSync(f).size; ok(size < 4_000_000, `取締りデータが大きすぎる（${size}バイト）`);
+  }
+}
+
 notes.forEach(n => console.log('  メモ: ' + n));
 if (fails.length){ console.log('NG（' + fails.length + '件）'); fails.forEach(f => console.log('  ✗ ' + f)); process.exit(1); }
 console.log(`OK：オービス${ORBIS.length}か所／予告${M.POINTS.length - ORBIS.length}か所／検証した路線 ${layers.join(', ')}`);

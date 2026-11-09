@@ -13,6 +13,13 @@ GitHub Pages で公開している、iPhone（Chrome / Safari）向けのバイ�
 
 1回の実行で扱うのは、フィードバック由来の問題1〜2件、または `docs/BACKLOG.md` の上から1〜2項目までにします。
 
+### 定例作業（毎回の最初に確認）
+- **速度取締り実施エリア（警視庁の月次公表）**
+  - 警視庁の公開交通取締りページ（`tools/police_speed.py` の PAGE_URL）のPDF「○月中の速度取締実施場所一覧」の月が、`data/speed/latest.json` の `month` より新しければ更新します
+  - 手順：`pip install --break-system-packages shapely mapbox-vector-tile`（必要なら）→ `python3 tools/police_speed.py` → `bash tests/run.sh` → push
+  - 見つからなかった場所（`missing`）は、CHANGELOG に件数を書きます。場所の書き方が新しくて読めない行があれば、`parse_pdf` / `place_queries` を直します
+  - 古い月のファイル（`data/speed/YYYY-MM.json`）は、直近3か月分だけ残します
+
 ### フィードバック（改善メモ・走行記録）の扱い
 - 置き場所は、非公開リポジトリ `shinikyou52673-cpu/orbis-navi-feedback` です（アクセスできない日は、この作業を飛ばします）
   - `memos/日付/*.json`：走行中・停車中に残した改善メモ（文字起こし、位置、ルート概要、直前の読み上げ）
