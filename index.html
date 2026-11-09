@@ -148,6 +148,20 @@
   #ctx button{display:block;width:100%;text-align:left;padding:13px 16px;background:none;border:none;border-bottom:1px solid var(--line);font-size:15px}
   #ctx button.go{color:var(--accent);font-weight:700}
   #ctx button:last-child{border-bottom:none;color:var(--sub)}
+  .field{padding:8px 0;border-bottom:1px solid var(--line)}
+  .field label{display:block;font-size:13px;color:var(--sub);margin-bottom:4px}
+  .field input{width:100%;height:42px;border-radius:10px;border:1px solid var(--line);background:var(--card2);color:var(--text);font-size:15px;padding:0 10px}
+  #pvAvoid{flex-wrap:wrap}
+  #pvAvoid .chip{padding:6px 10px;font-size:13px;border-radius:999px}
+  #pvAvoid .chip.on{background:color-mix(in srgb, var(--danger) 14%, var(--card));border-color:var(--danger);color:var(--danger)}
+  #btnMemo{right:14px;width:56px;height:56px;border-radius:28px;font-size:13px;font-weight:800;flex-direction:column;gap:0}
+  #btnMemo svg{width:22px;height:22px}
+  #memoBox{display:flex;position:fixed;z-index:70;left:12px;right:12px;top:calc(env(safe-area-inset-top) + 12px);background:var(--card);border-radius:18px;
+    box-shadow:0 6px 24px rgba(0,0,0,.3);padding:14px;flex-direction:column;gap:10px}
+  #memoBox b{font-size:16px}
+  #memoState{font-size:13px;color:var(--sub)}
+  #memoState.rec{color:var(--danger);font-weight:700}
+  #memoText{width:100%;height:110px;border-radius:12px;border:1px solid var(--line);background:var(--card2);color:var(--text);font-size:16px;padding:10px;margin:0}
   #toast{position:fixed;z-index:60;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 110px);max-width:88vw;
     background:#2b2f36;color:#fff;font-size:14px;padding:10px 16px;border-radius:12px;opacity:0;pointer-events:none;transition:opacity .2s;text-align:center}
   #toast.show{opacity:.96}
@@ -197,6 +211,7 @@
 <div class="card only-preview" id="previewCard">
   <div class="chips" id="pvChips"></div>
   <div id="pvInfo"></div>
+  <div class="chips" id="pvAvoid"></div>
   <div class="row2">
     <button class="btn primary" id="btnStart">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L4.5 20.3l.7.7L12 18l6.8 3 .7-.7z"/></svg>開始</button>
@@ -207,6 +222,18 @@
 </div>
 
 <!-- 案内中の下のバー -->
+<button class="fab only-nav" id="btnMemo" aria-label="改善メモを残す">
+  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-3.1A7 7 0 0 0 19 11z"/></svg>メモ</button>
+<div id="memoBox" hidden>
+  <b>改善メモ</b>
+  <div id="memoState">話してください（止まっているときに）</div>
+  <textarea id="memoText" placeholder="例：今の再検索でUターンしろと言われた／この交差点の案内が遅い"></textarea>
+  <div class="row2">
+    <button class="btn" id="btnMemoMic">🎤 話す</button>
+    <button class="btn primary" id="btnMemoSave">保存</button>
+    <button class="btn" id="btnMemoCancel">やめる</button>
+  </div>
+</div>
 <div class="card only-nav" id="navBar">
   <button id="navEnd" aria-label="案内を終了">
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
@@ -250,12 +277,18 @@
       <option value="positron">シンプル</option>
     </select></div>
   <h3>案内・警告</h3>
-  <div class="row"><span>音声案内（曲がり角）</span><input type="checkbox" id="optGuide" checked></div>
-  <div class="row"><span>オービスの音声読み上げ</span><input type="checkbox" id="optVoice" checked></div>
-  <div class="row"><span>警告音（ピピッ）</span><input type="checkbox" id="optBeep" checked></div>
+  <div class="row"><span>音の出し方</span>
+    <select id="optSound">
+      <option value="none">鳴らさない（音楽を止めない）</option>
+      <option value="beep">オービスだけ短い警告音</option>
+      <option value="orbis">オービスを音声で読み上げ</option>
+      <option value="all">曲がり角も音声で案内</option>
+    </select></div>
+  <p class="note">iPhoneでは、ブラウザから音を出すと、ほかのアプリの音楽が小さくなるか一時停止します（iPhone側の仕様・不具合で、Webアプリからは防げません）。音楽を優先するなら「鳴らさない」にしてください。画面には常に表示されます。</p>
   <div class="row"><span>ナビ中でなくてもオービス警告する</span><input type="checkbox" id="optIdleWarn" checked></div>
   <div class="row"><span>ルートを外れたら自動で再検索</span><input type="checkbox" id="optReroute" checked></div>
-  <button class="wide" id="btnTest">音声テスト</button>
+  <button class="wide" id="btnTest">音のテスト</button>
+  <button class="wide" id="btnMemoIdle">改善メモを残す</button>
   <h3>オービス表示</h3>
   <div id="layerRows"></div>
   <h3>再生（シミュ）</h3>
@@ -267,6 +300,14 @@
     </select></div>
   <div class="row"><span>山手トンネル内でGPSを切る（実走の再現）</span><input type="checkbox" id="optSimDrop" checked></div>
   <div class="row"><span>GPSのブレを加える（±8m）</span><input type="checkbox" id="optSimNoise" checked></div>
+  <h3>走行記録とメモの送信</h3>
+  <div class="row"><span>案内中の走行記録を残す</span><input type="checkbox" id="optRideLog" checked></div>
+  <div class="field"><label>送信先（GitHubの非公開リポジトリ）</label><input id="fbRepo" placeholder="ユーザー名/orbis-navi-feedback" autocomplete="off" autocapitalize="off"></div>
+  <div class="field"><label>アクセストークン（この端末だけに保存）</label><input id="fbToken" type="password" placeholder="github_pat_..." autocomplete="off"></div>
+  <button class="wide" id="btnFbTest">送信テスト</button>
+  <button class="wide" id="btnFbExport">走行記録とメモを書き出す</button>
+  <div id="fbStatus" class="note"></div>
+  <p class="note">案内を終えるたびに、走行記録（位置・判定・再検索・読み上げ）と改善メモを送信先へ保存します。未設定のときは端末に最新5回分を残します。走行記録には自宅付近の位置も含まれるため、送信先は必ず非公開にしてください。</p>
   <h3>オービス位置の修正</h3>
   <div class="row"><span>ピンをドラッグして修正する</span><input type="checkbox" id="optEdit"></div>
   <button class="wide" id="btnExport">修正した位置を書き出す</button>
@@ -344,6 +385,8 @@ const PRESETS = {
   ]}
 };
 
+const APP_VERSION = '2026-11-09';
+
 /* ===== 判定の設定 ===== */
 const HEADING_TOL = 60, AHEAD_TOL = 50, MIN_SPEED = 2;
 const BAD_ACC = 80;          // これより精度が悪いGPSは位置として使わない(m)
@@ -353,6 +396,8 @@ const ON_ROUTE_POINT = 45;   // オービスがルート上にあるとみなす
 const APPROACH_TOL = 25;     // ルートなしのとき、手前の車線の線から何mまでを「その道路」とみなすか
 const DR_MIN_SPEED = 16.7;   // 推定走行の最低速度(m/s)＝60km/h。渋滞時は警告が早まる側に倒す
 const DR_MAX_DIST = 3000;    // 山手トンネル以外で推定走行を進める上限(m)
+const WRONGWAY_ANGLE = 110;  // 進む向きとルートの向きがこれ以上ずれたら逆走とみなす(度)
+const WRONGWAY_SPEED = 2.5;  // 逆走の判定をする最低速度(m/s)。止まっているときは判定しない
 
 /* ===== 計算ユーティリティ ===== */
 const ER = 6371000, rad = d => d*Math.PI/180, deg = r => r*180/Math.PI;
@@ -562,12 +607,13 @@ function pushWarn(p, dEff, st, alerts){
    ========================================================= */
 function createEngine(){
   const E = { route:null, onRoute:[], along:null, idx:0, mode:'none', pos:null, heading:null, speed:0,
-    lastGood:null, lastT:null, hist:[], state:{}, acc:null };
+    lastGood:null, lastT:null, hist:[], state:{}, acc:null, anchor:null, rawHeading:null, wrongWay:false };
   E.setRoute = (route, points, layersOn) => {
     E.route = route; E.onRoute = route ? pointsOnRoute(route, points, layersOn) : [];
     E.along = null; E.idx = 0; E.state = {}; if (E.mode === 'snap' || E.mode === 'dr') E.mode = 'free';
   };
-  E.reset = () => { E.along = null; E.idx = 0; E.state = {}; E.lastGood = null; E.lastT = null; E.hist = []; E.mode = 'none'; E.speed = 0; E.heading = null; };
+  E.reset = () => { E.along = null; E.idx = 0; E.state = {}; E.lastGood = null; E.lastT = null; E.hist = []; E.mode = 'none'; E.speed = 0; E.heading = null;
+    E.anchor = null; E.rawHeading = null; E.wrongWay = false; };
   function avgSpeed(t){
     E.hist = E.hist.filter(h => t - h.t <= 30000);
     if (!E.hist.length) return E.speed;
@@ -587,21 +633,34 @@ function createEngine(){
     if (v != null){ E.speed = E.speed ? E.speed*0.6 + v*0.4 : v; E.hist.push({ t, v }); }
 
     const wasDr = E.mode === 'dr' || E.mode === 'lost';
-    let snapped = false;
+
+    // 実際に進んでいる向き：端末の値（動いているとき）→なければ10m以上動いた区間の向き
+    if (wasDr) E.anchor = null;                        // トンネル明けは向きを測り直す
+    if (fix.heading != null && !isNaN(fix.heading) && fix.heading >= 0 && E.speed >= MIN_SPEED) E.rawHeading = fix.heading;
+    if (!E.anchor) E.anchor = raw;
+    else if (dist(E.anchor, raw) >= 10){
+      if (!(fix.heading != null && fix.heading >= 0 && E.speed >= MIN_SPEED)) E.rawHeading = bearing(E.anchor, raw);
+      E.anchor = raw;
+    }
+
+    let snapped = false; E.wrongWay = false;
     if (E.route){
       const tol = Math.max(30, Math.min(fix.acc || 20, 60) * 1.5);
       const loc = wasDr ? locateOnRoute(E.route, raw, E.idx, 600, 1500) : locateOnRoute(E.route, raw, E.idx, 30, 400);
-      if (loc.d <= tol){
+      // 逆走の判定：ルートの線の近くでも、進む向きがルートと逆ならルート上とはみなさない
+      const rh = routeHeadingAt(E.route, loc.along);
+      const reverse = !wasDr && E.rawHeading != null && E.speed >= WRONGWAY_SPEED && angDiff(E.rawHeading, rh) > WRONGWAY_ANGLE;
+      if (loc.d <= tol && !reverse){
         snapped = true; E.along = loc.along; E.idx = loc.idx;
-        E.pos = pointAt(E.route, E.along).pos; E.heading = routeHeadingAt(E.route, E.along); E.mode = 'snap';
+        E.pos = pointAt(E.route, E.along).pos; E.heading = rh; E.mode = 'snap';
         E.offBy = 0;
-      } else E.offBy = loc.d;
+      } else {
+        E.offBy = reverse ? Math.max(loc.d, 60) : loc.d;   // 逆走は「外れた」として再検索の対象にする
+        E.wrongWay = reverse;
+      }
     }
     if (!snapped){
-      let h = null;
-      if (fix.heading != null && !isNaN(fix.heading) && fix.heading >= 0 && E.speed >= MIN_SPEED) h = fix.heading;
-      else if (E.lastGood && dist(E.lastGood.raw, raw) >= 8) h = bearing(E.lastGood.raw, raw);
-      if (h != null) E.heading = h;
+      if (E.rawHeading != null) E.heading = E.rawHeading;
       E.pos = raw; E.mode = 'free';
     }
     E.lastGood = { t, raw }; E.lastT = t;
@@ -652,7 +711,7 @@ function createEngine(){
       alerts = r.alerts; next = r.next;
     }
     return { pos:E.pos, heading:E.heading, speed:E.speed, along:E.along, mode:E.mode, acc:E.acc, offBy:E.offBy || 0,
-      hold: E.mode === 'dr' && !!E.drHold, alerts, next, event };
+      hold: E.mode === 'dr' && !!E.drHold, wrongWay: E.wrongWay, rawHeading: E.rawHeading, alerts, next, event };
   };
   return E;
 }
@@ -687,6 +746,7 @@ async function requestRoute(pts, opts){
   ];
   let lastErr = null, first = true; const tried = new Set();
   for (const t of plan){
+    if (opts.keepHeading && hasHeading && !t.heading) continue;   // 再検索では向き指定を外さない（Uターン案内の原因）
     const key = [t.costing, t.lang, t.heading && hasHeading, t.filter && hasFilter].join('|');
     if (tried.has(key)) continue; tried.add(key);
     if (!first) await sleep(1100); first = false;
@@ -694,6 +754,8 @@ async function requestRoute(pts, opts){
     if (t.lang) body.directions_options.language = t.lang;
     const co = opts.noHwy ? { use_highways:0, use_tolls:0 } : { use_highways:1 };
     body.costing_options = { [t.costing]: co };
+    if (opts.exclude && opts.exclude.length) body.exclude_locations = opts.exclude;
+    if (opts.originHeadingTol && body.locations[0].heading != null) body.locations[0].heading_tolerance = opts.originHeadingTol;
     if (pts.length === 2) body.alternates = 2;
     try {
       const res = await fetch(VALHALLA, { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(body) });
@@ -728,10 +790,13 @@ if (typeof window !== 'undefined' && window.maplibregl){
   Object.assign(layersOn, store.get('layersOn', {}));
 
   // 設定の復元
-  const prefIds = { headingUp:'optHeadingUp', guide:'optGuide', voice:'optVoice', beep:'optBeep', idleWarn:'optIdleWarn', reroute:'optReroute' };
+  const prefIds = { headingUp:'optHeadingUp', idleWarn:'optIdleWarn', reroute:'optReroute', rideLog:'optRideLog' };
   const prefs = store.get('prefs', {});
   Object.entries(prefIds).forEach(([k, id]) => { if (prefs[k] != null) $(id).checked = prefs[k]; $(id).addEventListener('change', () => { prefs[k] = $(id).checked; store.set('prefs', prefs); }); });
   const P = k => $(prefIds[k]).checked;
+  $('optSound').value = prefs.sound || 'none';
+  $('optSound').addEventListener('change', () => { prefs.sound = $('optSound').value; store.set('prefs', prefs); });
+  const soundMode = () => $('optSound').value;
   let mode3d = store.get('mode3d', true);
   const styleName = store.get('style', 'liberty'); $('optStyle').value = styleName;
 
@@ -878,7 +943,8 @@ if (typeof window !== 'undefined' && window.maplibregl){
   function layoutFabs(){
     const b = bottomInset(), safe = 'env(safe-area-inset-bottom)';
     $('btnLocate').style.bottom = state === 'idle' ? `calc(${safe} + 96px)` : `${b + 14}px`;
-    $('btnLocate').hidden = state === 'nav' && cam.follow;
+    $('btnLocate').hidden = state === 'nav';
+    $('btnMemo').style.bottom = `${b + 14}px`;
     $('btnLocate').classList.toggle('follow', cam.follow);
     $('speedBadge').style.bottom = `${b + 14}px`;
     $('modeChip').style.bottom = `${b + 88}px`;
@@ -939,9 +1005,13 @@ if (typeof window !== 'undefined' && window.maplibregl){
   // ---- 音声 ----
   let audioCtx = null;
   function unlockAudio(){ try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch(e){} }
-  function beep(){
-    if (!P('beep')) return;
+  // 音声セッションの種類：警告音は他の音と混ぜる（ambient）、読み上げは止めずに小さくする（transient）を試す
+  function setSession(type){ try { if (navigator.audioSession) navigator.audioSession.type = type; } catch(e){} }
+  setSession('ambient');
+  function beep(force){
+    if (!force && !['beep', 'orbis', 'all'].includes(soundMode())) return;
     try {
+      setSession('ambient');
       unlockAudio();
       [0, .18].forEach(t => {
         const o = audioCtx.createOscillator(), g = audioCtx.createGain();
@@ -953,10 +1023,17 @@ if (typeof window !== 'undefined' && window.maplibregl){
     } catch(e){}
   }
   const spokenLog = [];   // テスト確認用
-  function speak(text){
+  // kind：orbis（オービス）／guide（曲がり角）／sys（開始・再検索など）／test（音のテスト）
+  function speak(text, kind){
+    const m = soundMode();
+    const play = kind === 'test' || m === 'all' || (m === 'orbis' && kind === 'orbis');
     spokenLog.push(text); if (spokenLog.length > 50) spokenLog.shift();
-    if (!('speechSynthesis' in window)) return;
-    const u = new SpeechSynthesisUtterance(text); u.lang = 'ja-JP'; u.rate = 1.05; speechSynthesis.speak(u);
+    logEvent('speak', { text, kind, played:play });
+    if (!play || !('speechSynthesis' in window)) return;
+    setSession('transient');
+    const u = new SpeechSynthesisUtterance(text); u.lang = 'ja-JP'; u.rate = 1.05;
+    u.onend = () => { if (!speechSynthesis.speaking) setSession('ambient'); };
+    speechSynthesis.speak(u);
   }
   window.__orbisNavi = { spokenLog, cam, getState:() => state, getRoutes:() => routes, map };
 
@@ -974,7 +1051,9 @@ if (typeof window !== 'undefined' && window.maplibregl){
     const c = pos.coords;
     const fix = { lat:c.latitude, lon:c.longitude, acc:c.accuracy, heading:c.heading, speed:c.speed, t:performance.now() };
     lastFixAt = Date.now();
-    handle(eng.gps(fix, POINTS, layersOn), false);
+    const res = eng.gps(fix, POINTS, layersOn);
+    handle(res, false);
+    if (navOn && res) rideFix(res, fix);
     if (Date.now() - lastSave > 30000){ lastSave = Date.now(); store.set('lastPos', { lat:fix.lat, lon:fix.lon }); }
     while (fixWaiters.length) fixWaiters.shift()(last);
   }
@@ -1027,13 +1106,13 @@ if (typeof window !== 'undefined' && window.maplibregl){
       $('oaTitle').textContent = nx.d > 0 ? `オービス あと${fmtDist(nx.d)}` : 'オービス付近';
       $('oaText').textContent = `${nx.point.name}／制限${nx.point.limit}km/h ${u}${res.mode === 'dr' ? '・推定位置' : ''}`;
     } else $('orbisAlert').classList.remove('show');
-    res.alerts.forEach(a => { beep(); if (P('voice')) setTimeout(() => speak(a.text), 400); });
+    res.alerts.forEach(a => { beep(); setTimeout(() => speak(a.text, 'orbis'), 400); });
   }
 
   // ---- 案内中の画面更新・音声案内・自動リルート ----
   const MODE_LABEL = { none:'GPS待ち', free:'GPS', snap:'ルート上', dr:'推定位置（GPSなし）', lost:'位置不明' };
   const spokenM = new Map();
-  let offSince = null, lastReroute = 0, rerouting = false, lastAlong = 0;
+  let offSince = null, lastReroute = 0, rerouting = false, lastAlong = 0, wasWrongWay = false;
   const clock = sec => { const d = new Date(Date.now() + sec*1000); return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'); };
   function navUpdate(res, isSim){
     $('spd').textContent = Math.round((res.speed || 0) * 3.6);
@@ -1048,13 +1127,15 @@ if (typeof window !== 'undefined' && window.maplibregl){
       $('navSub').textContent = `${fmtDist(remain)}・${clock(sec)}着`;
       const nm = nextManeuver(r, res.along);
       if (nm){ $('turnArrow').textContent = arrowFor(nm.m.type); $('turnDist').textContent = fmtDist(nm.d); $('turnText').textContent = nm.m.text; }
-      if (P('guide')) voiceGuide(r, res.along, res.speed || 0);
+      voiceGuide(r, res.along, res.speed || 0);
       $('navStatus').textContent = res.mode === 'dr' ? (res.hold ? 'トンネル出口付近で待機中（GPSの復帰待ち）' : 'GPSなし：ルート上を推定で進めています') : (res.event === 'resync' ? 'GPSが戻りました' : '');
-      if (remain < 35 && res.mode === 'snap' && !isSim){ speak('目的地に到着しました。案内を終了します。'); endNav(true); }
+      if (remain < 35 && res.mode === 'snap' && !isSim){ speak('目的地に到着しました。案内を終了します。', 'sys'); logEvent('arrive', {}); endNav(true); }
     } else if (res.mode === 'free'){
-      $('navStatus').textContent = `ルートから外れています（約${Math.round(res.offBy)}m）`;
+      $('navStatus').textContent = res.wrongWay ? 'ルートと逆方向に進んでいます' : `ルートから外れています（約${Math.round(res.offBy)}m）`;
+      if (res.wrongWay && !wasWrongWay) logEvent('wrongway', { along:lastAlong });
       if (!isSim) maybeReroute(res);
     }
+    wasWrongWay = !!res.wrongWay;
   }
   function voiceGuide(r, along, speed){
     for (let i = 0; i < r.maneuvers.length; i++){
@@ -1065,8 +1146,8 @@ if (typeof window !== 'undefined' && window.maplibregl){
       const hw = speed > 15;                                // 高速域は早めに
       const aD = hw ? 1000 : 300, pD = hw ? 350 : 90;
       const s = spokenM.get(i) || {};
-      if (!s.alert && d <= aD && d > pD + 60){ s.alert = true; speak(`${speakDist(guideRound(d))}先、${m.alert || m.text}`); }
-      if (!s.pre && d <= pD){ s.pre = true; s.alert = true; speak(m.verbal || m.text); }
+      if (!s.alert && d <= aD && d > pD + 60){ s.alert = true; speak(`${speakDist(guideRound(d))}先、${m.alert || m.text}`, 'guide'); }
+      if (!s.pre && d <= pD){ s.pre = true; s.alert = true; speak(m.verbal || m.text, 'guide'); }
       spokenM.set(i, s);
       break;                                                // 直近の1つだけ
     }
@@ -1080,18 +1161,30 @@ if (typeof window !== 'undefined' && window.maplibregl){
     if (now - offSince < 6000 || now - lastReroute < 20000) return;
     reroute();
   }
+  const isUturnStart = r => r.maneuvers.some(m => (m.type === 12 || m.type === 13) && r.cum[Math.min(m.begin, r.cum.length-1)] < 600);
+  function movePoint(p, brg, m){ const b = rad(brg); return { lat: p.lat + m*Math.cos(b)/110540, lon: p.lon + m*Math.sin(b)/(111320*Math.cos(rad(p.lat))) }; }
   async function reroute(){
     rerouting = true; lastReroute = performance.now();
-    speak('ルートを再検索します。');
-    const cur = { lat:last.pos.lat, lon:last.pos.lon, name:'現在地', heading: (last.speed || 0) >= MIN_SPEED ? last.heading : null };
+    speak('ルートを再検索します。', 'sys');
+    const hdg = last.rawHeading != null ? last.rawHeading : last.heading;
+    const moving = (last.speed || 0) >= MIN_SPEED;
+    const cur = { lat:last.pos.lat, lon:last.pos.lon, name:'現在地', heading: moving && hdg != null ? hdg : null };
     const ahead = routeWps.slice(1).filter((w, i) => (wpAlong[i+1] == null) || wpAlong[i+1] > lastAlong + 30);
     if (!ahead.length) ahead.push(routeWps[routeWps.length-1]);
+    const opts = { noHwy:$('optNoHwy').checked, exclude:avoidLocs(), keepHeading:true, originHeadingTol:35 };
+    const ev = { reason: last.wrongWay ? 'wrongway' : 'offroute', heading: cur.heading != null ? Math.round(cur.heading) : null, from:[+cur.lat.toFixed(6), +cur.lon.toFixed(6)] };
     try {
-      const r = await requestRoute([cur, ...ahead], { noHwy:$('optNoHwy').checked });
-      routes = [r.routes[0]]; sel = 0; routeWps = [cur, ...ahead]; computeWpAlong();
+      let r = await requestRoute([cur, ...ahead], opts), start = cur, retried = false;
+      // Uターンから始まるルートなら、進行方向の80m先を出発点にして取り直す
+      if (cur.heading != null && isUturnStart(r.routes[0])){
+        const fwd = { ...cur, ...movePoint(cur, cur.heading, 80) };
+        try { const r2 = await requestRoute([fwd, ...ahead], opts); retried = true; if (!isUturnStart(r2.routes[0])){ r = r2; start = fwd; } } catch(_){}
+      }
+      routes = [r.routes[0]]; sel = 0; routeWps = [start, ...ahead]; computeWpAlong();
       eng.setRoute(routes[0], POINTS, layersOn); spokenM.clear(); refreshRoutes();
+      logEvent('reroute', { ...ev, ok:true, retried, uturn:isUturnStart(routes[0]), first:routes[0].maneuvers.slice(0, 3).map(m => m.text) });
       toast('新しいルートに切り替えました');
-    } catch(e){ toast('再検索に失敗しました：' + e.message, 4000); }
+    } catch(e){ logEvent('reroute', { ...ev, ok:false, error:e.message }); toast('再検索に失敗しました：' + e.message, 4000); }
     finally { rerouting = false; offSince = null; }
   }
   function computeWpAlong(){
@@ -1243,7 +1336,7 @@ if (typeof window !== 'undefined' && window.maplibregl){
     if ($('optLoop').checked) list.push({ ...pts[0] });
     $('routeErr').innerHTML = '<div class="note">ルート検索中…</div>';
     try {
-      const r = await requestRoute(list, { noHwy:$('optNoHwy').checked });
+      const r = await requestRoute(list, { noHwy:$('optNoHwy').checked, exclude:avoidLocs() });
       routes = r.routes; sel = 0; routeWps = list; computeWpAlong();
       eng.setRoute(routes[sel], POINTS, layersOn);
       $('routeErr').innerHTML = ''; routeMeta = r;
@@ -1261,6 +1354,7 @@ if (typeof window !== 'undefined' && window.maplibregl){
     const r = routes[sel];
     const n = pointsOnRoute(r, POINTS, layersOn).filter(o => o.point.type === 'orbis').length;
     const via = r.roads.slice(0, 4).join(' → ') || '一般道';
+    renderAvoid(r);
     $('pvInfo').innerHTML = `${escapeHtml(via)}<br>到着予定 ${clock(r.time)}／ルート上のオービス ${n}か所${routeMeta && routeMeta.costing !== 'motorcycle' ? '／車用ルート' : ''}${$('optLoop').checked ? '／周回' : ''}`;
     requestAnimationFrame(layoutFabs);
   }
@@ -1285,12 +1379,14 @@ if (typeof window !== 'undefined' && window.maplibregl){
     setState('nav'); setFollow(true);
     $('turnArrow').textContent = routes[sel] ? '↑' : '⚠'; $('turnDist').textContent = routes[sel] ? '' : 'ルートなし';
     $('turnText').textContent = routes[sel] ? 'ルートに沿って進んでください' : 'オービス警告のみで走行中';
-    speak(routes[sel] ? '案内を開始します。' : 'オービス警告を開始します。');
+    speak(routes[sel] ? '案内を開始します。' : 'オービス警告を開始します。', 'sys');
     await requestWake(); startDrTimer();
+    rideStart();
     if (!last || !last.pos) toast('現在地を取得中…');
     else handle(last, false);
   }
   function endNav(arrived){
+    rideEnd(arrived ? 'arrived' : 'ended');
     navOn = false; releaseWake(); stopDrTimer();
     $('orbisAlert').classList.remove('show');
     if (arrived || !routes.length){ routes = []; pts = []; drawPoints(); refreshRoutes(); eng.setRoute(null, POINTS, layersOn); setState('idle'); map.setPadding({ top:0, bottom:0, left:0, right:0 }); cam.pad = null; setFollow(!!(last && last.pos)); }
@@ -1302,7 +1398,7 @@ if (typeof window !== 'undefined' && window.maplibregl){
   function gauss(){ let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
   function startSim(){
     const r = routes[sel]; if (!r){ toast('先にルートを検索してください'); return; }
-    unlockAudio(); speak('ルートの再生を開始します。');
+    unlockAudio(); speak('ルートの再生を開始します。', 'sys');
     simOn = true; simS = 0; spokenM.clear(); cam.navZoom = null;
     eng.reset(); eng.setRoute(r, POINTS, layersOn);
     setState('nav'); setFollow(true); $('navStatus').textContent = '再生中';
@@ -1312,7 +1408,7 @@ if (typeof window !== 'undefined' && window.maplibregl){
       const mult = +$('optSimSpeed').value, v = 16.7 * mult;
       simS += v * tick;
       const p = pointAt(r, simS);
-      if (p.end){ stopSim(); speak('再生を終了しました。'); return; }
+      if (p.end){ stopSim(); speak('再生を終了しました。', 'sys'); return; }
       if ($('optSimDrop').checked && inYamateTunnel(p.pos)) return;
       let lat = p.pos.lat, lon = p.pos.lon;
       if ($('optSimNoise').checked){ lat += gauss()*8/110540; lon += gauss()*8/(111320*Math.cos(rad(lat))); }
@@ -1331,7 +1427,7 @@ if (typeof window !== 'undefined' && window.maplibregl){
   document.querySelectorAll('[data-close]').forEach(b => b.onclick = () => $(b.dataset.close).classList.remove('open'));
   $('btnDirections').onclick = () => { if (!pts.length && last && last.pos) pts = [{ lat:last.pos.lat, lon:last.pos.lon, name:'現在地' }]; drawPoints(); openSheet('routeSheet'); };
   $('btnMenu').onclick = () => openSheet('menuSheet');
-  $('btnTest').onclick = () => { unlockAudio(); beep(); setTimeout(() => speak('300メートル先、右方向です。'), 300); setTimeout(() => speak('1キロ先、オービス。制限60キロ。'), 2600); };
+  $('btnTest').onclick = () => { unlockAudio(); beep(true); setTimeout(() => speak('300メートル先、右方向です。', 'test'), 300); setTimeout(() => speak('1キロ先、オービス。制限60キロ。', 'test'), 2600); };
   $('optStyle').onchange = e => { store.set('style', e.target.value); map.setStyle(STYLE(e.target.value)); };
 
   // ---- オービス位置の修正 ----
@@ -1368,6 +1464,164 @@ if (typeof window !== 'undefined' && window.maplibregl){
     const k = e.target.dataset.layer; if (!k) return; layersOn[k] = e.target.checked; store.set('layersOn', layersOn);
     refreshOrbis(); if (routes[sel]) eng.setRoute(routes[sel], POINTS, layersOn); if (editOn) setEdit(true);
   });
+
+  // =========================================================
+  //  追加機能①：高速道路を路線ごとに避ける（本線だけを除外し、交差する一般道は通れるまま）
+  // =========================================================
+  const HWY_RE = /首都高|高速|自動車道|有料|第三京浜|第二京浜道路|京葉道路|横浜新道|保土ヶ谷バイパス|アクアライン/;
+  let avoidRoads = store.get('avoidRoads', []);       // [{ name, locs:[{lat,lon,search_filter}] }]
+  const avoidLocs = () => avoidRoads.flatMap(a => a.locs);
+  function roadSegments(r, name){
+    const segs = [];
+    r.maneuvers.forEach((m, i) => {
+      if (roadLabel(m.streets || []) !== name) return;
+      const a = m.begin, b = i + 1 < r.maneuvers.length ? r.maneuvers[i+1].begin : r.coords.length - 1;
+      if (b > a) segs.push([a, b]);
+    });
+    return segs;
+  }
+  function makeAvoid(r, name){
+    const cls = /首都高|高速|自動車道|第三京浜|京葉道路|横浜新道/.test(name) ? 'motorway' : 'trunk';
+    const locs = [];
+    for (const [a, b] of roadSegments(r, name)){
+      const s0 = r.cum[a], s1 = r.cum[b], len = s1 - s0;
+      const marks = len < 600 ? [s0 + len / 2] : (() => { const out = []; for (let s = s0 + 300; s < s1 - 100; s += 1000) out.push(s); return out; })();
+      marks.forEach(sv => { const p = pointAt(r, sv).pos; locs.push({ lat:+p.lat.toFixed(6), lon:+p.lon.toFixed(6), search_filter:{ min_road_class:cls, exclude_ramp:true } }); });
+    }
+    return locs;
+  }
+  function renderAvoid(r){
+    const onRoute = []; r.maneuvers.forEach(m => { const nm = roadLabel(m.streets || []); if (nm && HWY_RE.test(nm) && !onRoute.includes(nm)) onRoute.push(nm); });
+    const chips = avoidRoads.map((a, i) => `<button class="chip on" data-unavoid="${i}">${escapeHtml(a.name)}を避け中 ✕</button>`)
+      .concat(onRoute.filter(n => !avoidRoads.some(a => a.name === n)).map(n => `<button class="chip" data-avoid="${escapeHtml(n)}">⛔ ${escapeHtml(n)}を避ける</button>`));
+    $('pvAvoid').innerHTML = chips.join('');
+    $('pvAvoid').hidden = !chips.length;
+  }
+  $('pvAvoid').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.avoid){
+      const name = b.dataset.avoid, locs = makeAvoid(routes[sel], name);
+      if (!locs.length){ toast('避ける地点を作れませんでした'); return; }
+      avoidRoads.push({ name, locs }); store.set('avoidRoads', avoidRoads);
+      toast(`${name}を避けて再検索します`); calcRoute();
+    } else if (b.dataset.unavoid != null){
+      const a = avoidRoads.splice(+b.dataset.unavoid, 1)[0]; store.set('avoidRoads', avoidRoads);
+      toast(`${a.name}を避ける設定を解除しました`); calcRoute();
+    }
+  });
+
+  // =========================================================
+  //  走行記録と改善メモ（自動改善の材料）
+  // =========================================================
+  const ride = { active:false, id:null, startedAt:0, fixes:[], events:[] };
+  const routeSummary = () => { const r = routes[sel]; if (!r) return null;
+    return { km:+(r.length/1000).toFixed(1), min:Math.round(r.time/60), roads:r.roads.slice(0, 8), loop:$('optLoop').checked,
+      wps:routeWps.map(w => ({ name:w.name, lat:+w.lat.toFixed(5), lon:+w.lon.toFixed(5) })), avoid:avoidRoads.map(a => a.name), turns:r.maneuvers.length }; };
+  function logEvent(type, data){ if (!ride.active) return; ride.events.push({ t:Date.now(), type, ...data }); }
+  function rideStart(){
+    if (!P('rideLog')) return;
+    ride.active = true; ride.id = new Date().toISOString().replace(/[:.]/g, '-'); ride.startedAt = Date.now(); ride.fixes = []; ride.events = [];
+    logEvent('start', { route:routeSummary(), sound:soundMode(), ua:navigator.userAgent });
+  }
+  function rideFix(res, fix){
+    if (!ride.active) return;
+    const lf = ride.fixes[ride.fixes.length - 1]; if (lf && Date.now() - lf.t < 1500) return;
+    ride.fixes.push({ t:Date.now(), lat:+fix.lat.toFixed(6), lon:+fix.lon.toFixed(6), acc:Math.round(fix.acc || 0), spd:+(res.speed || 0).toFixed(1),
+      hdg: res.rawHeading != null ? Math.round(res.rawHeading) : null, mode:res.mode, along: res.along != null ? Math.round(res.along) : null,
+      off:Math.round(res.offBy || 0), ww: res.wrongWay ? 1 : 0 });
+    if (ride.fixes.length > 20000) ride.fixes.splice(0, 1000);
+  }
+  function rideEnd(reason){
+    if (!ride.active) return;
+    logEvent('end', { reason });
+    const rec = { kind:'ride', id:ride.id, startedAt:ride.startedAt, endedAt:Date.now(), version:APP_VERSION, events:ride.events, fixes:ride.fixes, uploaded:false };
+    ride.active = false;
+    saveLocal('rides', rec, 5);
+    uploadPending();
+  }
+  function saveLocal(key, rec, keep){
+    let arr = store.get(key, []); arr.push(rec);
+    while (arr.length > keep) arr.shift();
+    for (;;){ try { localStorage.setItem(key, JSON.stringify(arr)); return; } catch(e){ if (arr.length <= 1) return; arr.shift(); } }
+  }
+
+  // ---- 改善メモ（音声入力→だめならキーボードの音声入力） ----
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let rec = null;
+  function openMemo(){
+    try { speechSynthesis.cancel(); } catch(e){}
+    $('memoText').value = ''; $('memoBox').hidden = false; closeSheets();
+    if (SR) startRec(); else { $('memoState').textContent = 'キーボードのマイクで話すか、文字で入力してください'; $('memoText').focus(); }
+  }
+  function startRec(){
+    try {
+      rec = new SR(); rec.lang = 'ja-JP'; rec.interimResults = true; rec.continuous = false;
+      const base = $('memoText').value ? $('memoText').value + ' ' : '';
+      rec.onresult = e => { let t = ''; for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript; $('memoText').value = base + t; };
+      rec.onerror = e => { $('memoState').className = ''; $('memoState').textContent = e.error === 'not-allowed' ? 'マイクが許可されていません。キーボードのマイクか文字で入力してください' : '聞き取れませんでした。もう一度「話す」を押すか、文字で入力してください'; };
+      rec.onend = () => { $('memoState').className = ''; if ($('memoText').value) $('memoState').textContent = '内容を確認して「保存」を押してください'; };
+      rec.start(); $('memoState').className = 'rec'; $('memoState').textContent = '● 聞き取り中…話してください';
+    } catch(e){ $('memoState').textContent = 'キーボードのマイクで話すか、文字で入力してください'; $('memoText').focus(); }
+  }
+  $('btnMemo').onclick = openMemo;
+  $('btnMemoIdle').onclick = openMemo;
+  $('btnMemoMic').onclick = () => { if (SR){ try { rec && rec.abort(); } catch(e){} startRec(); } else $('memoText').focus(); };
+  $('btnMemoCancel').onclick = () => { try { rec && rec.abort(); } catch(e){} $('memoBox').hidden = true; };
+  $('btnMemoSave').onclick = () => {
+    try { rec && rec.abort(); } catch(e){}
+    const text = $('memoText').value.trim(); if (!text){ toast('メモが空です'); return; }
+    const memo = { kind:'memo', id:new Date().toISOString().replace(/[:.]/g, '-'), t:Date.now(), text, version:APP_VERSION, state,
+      pos: last && last.pos ? [+last.pos.lat.toFixed(6), +last.pos.lon.toFixed(6)] : null, mode: last ? last.mode : null,
+      along: last && last.along != null ? Math.round(last.along) : null, speed: last ? +(last.speed || 0).toFixed(1) : null,
+      route:routeSummary(), recentSpoken:spokenLog.slice(-5), ride: ride.active ? ride.id : null, uploaded:false };
+    logEvent('memo', { text, id:memo.id });
+    saveLocal('memos', memo, 50);
+    $('memoBox').hidden = true; toast('メモを保存しました'); uploadPending();
+  };
+
+  // ---- 送信（GitHubの非公開リポジトリへ。トークンはこの端末だけ） ----
+  const fbCfg = store.get('fbCfg', {}); $('fbRepo').value = fbCfg.repo || ''; $('fbToken').value = fbCfg.token || '';
+  ['fbRepo', 'fbToken'].forEach(id => $(id).addEventListener('change', () => { fbCfg.repo = $('fbRepo').value.trim(); fbCfg.token = $('fbToken').value.trim(); store.set('fbCfg', fbCfg); }));
+  function b64(str){ const bytes = new TextEncoder().encode(str); let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(bin); }
+  async function ghPut(path, obj){
+    if (!fbCfg.repo || !fbCfg.token) throw new Error('送信先が未設定です');
+    const res = await fetch(`https://api.github.com/repos/${fbCfg.repo}/contents/${path}`, { method:'PUT',
+      headers:{ Authorization:`Bearer ${fbCfg.token}`, Accept:'application/vnd.github+json', 'Content-Type':'application/json' },
+      body:JSON.stringify({ message:`feedback: ${path}`, content:b64(JSON.stringify(obj)) }) });
+    if (!res.ok){ const t = await res.text().catch(() => ''); throw new Error(`HTTP ${res.status} ${t.slice(0, 80)}`); }
+  }
+  let uploading = false;
+  async function uploadPending(){
+    if (uploading || !fbCfg.repo || !fbCfg.token) return;
+    uploading = true; let n = 0, err = null;
+    try {
+      for (const key of ['memos', 'rides']){
+        const arr = store.get(key, []);
+        for (const r of arr){
+          if (r.uploaded) continue;
+          try { const day = r.id.slice(0, 10); await ghPut(`${key}/${day}/${r.id}.json`, { ...r, uploaded:undefined }); r.uploaded = true; n++; }
+          catch(e){ err = e; break; }
+        }
+        try { localStorage.setItem(key, JSON.stringify(arr)); } catch(e){}
+        if (err) break;
+      }
+    } finally { uploading = false; }
+    $('fbStatus').textContent = err ? `未送信があります：${err.message}` : (n ? `${n}件を送信しました` : '');
+  }
+  $('btnFbTest').onclick = async () => {
+    fbCfg.repo = $('fbRepo').value.trim(); fbCfg.token = $('fbToken').value.trim(); store.set('fbCfg', fbCfg);
+    $('fbStatus').textContent = '送信テスト中…';
+    try { await ghPut(`test/${new Date().toISOString().replace(/[:.]/g, '-')}.json`, { kind:'test', t:Date.now(), version:APP_VERSION }); $('fbStatus').textContent = '送信できました。今後は自動で送信します。'; uploadPending(); }
+    catch(e){ $('fbStatus').textContent = '送信できませんでした：' + e.message; }
+  };
+  $('btnFbExport').onclick = () => {
+    const data = { exportedAt:new Date().toISOString(), version:APP_VERSION, memos:store.get('memos', []), rides:store.get('rides', []) };
+    const blob = new Blob([JSON.stringify(data)], { type:'application/json' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `orbis-navi-feedback-${Date.now()}.json`; document.body.appendChild(a); a.click(); a.remove();
+    toast('書き出しました（ファイルをチャットに添付してください）', 4000);
+  };
+  setTimeout(uploadPending, 4000);
+  window.__orbisNavi.getRide = () => ride; window.__orbisNavi.getAvoid = () => avoidRoads;
 
   renderPts(); setState('idle');
 }

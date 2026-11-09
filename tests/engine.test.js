@@ -87,6 +87,21 @@ for (const layer of layers){
     for (const thr of o.point.warn) ok((got[o.point.id] || []).includes(thr), `${o.point.id}: ${thr}m警告が出なかった`);
   }
 
+  // 逆走：ルートを逆向きに走ったら「ルート上」と判定せず、逆走として扱う
+  {
+    const E4 = M.createEngine(); E4.setRoute(R, M.POINTS, on);
+    let s4 = Math.min(total - 50, 3000), t4 = 0, snapAfter = 0, ww = 0, n4 = 0;
+    for (let k = 0; k < 120 && s4 > 50; k++){
+      s4 -= 8.35; t4 += 500; const p = M.pointAt(R, s4);
+      if (M.inYamateTunnel(p.pos)) continue;
+      const r = E4.gps({ lat:p.pos.lat, lon:p.pos.lon, acc:10, heading:(p.heading + 180) % 360, speed:16.7, t:t4 }, M.POINTS, on);
+      if (!r) continue; n4++;
+      if (n4 > 3){ if (r.mode === 'snap') snapAfter++; if (r.wrongWay) ww++; }
+    }
+    ok(snapAfter === 0, `${layer}: 逆走しているのに「ルート上」と判定された（${snapAfter}回）`);
+    ok(ww > 0, `${layer}: 逆走を検出できなかった`);
+  }
+
   // ルートなし：約60m横の並走道路では警告しない
   for (const p of ORBIS.filter(p => p.layer === layer)){
     const line = M.APPROACH[p.id]; if (!line) continue;
