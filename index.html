@@ -162,6 +162,14 @@
   #memoState{font-size:13px;color:var(--sub)}
   #memoState.rec{color:var(--danger);font-weight:700}
   #memoText{width:100%;height:110px;border-radius:12px;border:1px solid var(--line);background:var(--card2);color:var(--text);font-size:16px;padding:10px;margin:0}
+  #btnMemo.listen{box-shadow:0 0 0 3px var(--ok),var(--shadow)}
+  #btnMemo.recording{background:var(--danger);color:#fff;animation:vmPulse 1.2s infinite}
+  @keyframes vmPulse{50%{box-shadow:0 0 0 8px color-mix(in srgb, var(--danger) 35%, transparent)}}
+  #vmBanner{position:fixed;z-index:25;left:12px;right:12px;top:calc(env(safe-area-inset-top) + 104px);background:var(--danger);color:#fff;border-radius:16px;
+    box-shadow:0 6px 24px rgba(0,0,0,.3);padding:12px 14px;display:flex;flex-direction:column;gap:4px}
+  #vmBanner[hidden]{display:none}
+  #vmBanner b{font-size:18px}
+  #vmBanner span{font-size:14px;opacity:.95;max-height:3.2em;overflow:hidden}
   #toast{position:fixed;z-index:60;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 110px);max-width:88vw;
     background:#2b2f36;color:#fff;font-size:14px;padding:10px 16px;border-radius:12px;opacity:0;pointer-events:none;transition:opacity .2s;text-align:center}
   #toast.show{opacity:.96}
@@ -224,6 +232,7 @@
 <!-- 案内中の下のバー -->
 <button class="fab only-nav" id="btnMemo" aria-label="改善メモを残す">
   <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-3.1A7 7 0 0 0 19 11z"/></svg>メモ</button>
+<div id="vmBanner" hidden><b>● メモ録音中</b><span id="vmText">話してください。「メモ終了」で保存します</span></div>
 <div id="memoBox" hidden>
   <b>改善メモ</b>
   <div id="memoState">話してください（止まっているときに）</div>
@@ -289,6 +298,14 @@
   <div class="row"><span>ルートを外れたら自動で再検索</span><input type="checkbox" id="optReroute" checked></div>
   <button class="wide" id="btnTest">音のテスト</button>
   <button class="wide" id="btnMemoIdle">改善メモを残す</button>
+  <h3>声で操作（手袋のまま）</h3>
+  <div class="row"><span>「メモ開始」「メモ終了」で改善メモ<br><small id="voiceSt" style="color:var(--sub)"></small></span>
+    <select id="optVoice">
+      <option value="off">使わない</option>
+      <option value="quiet">使う（合図の音なし）</option>
+      <option value="beep">使う（合図の音あり）</option>
+    </select></div>
+  <p class="note">案内中はマイクで聞き取りを続けます。「メモ開始」と言うと録音を始め、「メモ終了」と言うと保存します。やめるときは「メモ取り消し」です。「メモ終了」を言い忘れても、10秒黙ると自動で保存します。録音中は画面上部が赤くなり、メモボタンが赤く点滅します。<br><b>注意：</b>iPhoneでは、マイクを使っている間、ほかのアプリの音楽が小さくなるか止まることがあります。画面を消したり別のアプリに切り替えたりすると聞き取りは止まります。初めて使うときは、走る前にここで選んで、マイクの許可を済ませてください（選ぶと20秒だけ試しに聞き取ります）。</p>
   <h3>オービス表示</h3>
   <div id="layerRows"></div>
   <h3>二輪の通行規制</h3>
@@ -391,7 +408,7 @@ const PRESETS = {
   ]}
 };
 
-const APP_VERSION = '2026-11-09';
+const APP_VERSION = '2026-11-10';
 
 /* ===== 判定の設定 ===== */
 const HEADING_TOL = 60, AHEAD_TOL = 50, MIN_SPEED = 2;
@@ -560,6 +577,46 @@ function routeTolls(route){
   });
   trips.forEach(t => t.yen = shutokoToll(t.km));
   return { shutoko:trips, total:trips.reduce((s, t) => s + t.yen, 0), others };
+}
+
+/* =========================================================
+   声でメモ：「メモ開始」〜「メモ終了」の間に話した内容をメモにする（手袋で画面を触れないとき用）
+   聞き間違いに備えて言い方の幅を持たせる。「メモ終了」を聞き逃しても、黙って silence ミリ秒たてば自動で保存
+   ========================================================= */
+const VM_MEMO = '(?:メモ|めも|目も|メモー)\\s*(?:を|の)?\\s*';
+const VM_START = new RegExp(VM_MEMO + '(?:開始|かいし|スタート|始め|はじめ|始まり|取って|とって|お願い|おねがい)(?:します|して|て)?');
+const VM_END = new RegExp(VM_MEMO + '(?:終了|修了|しゅうりょう|終わり|おわり|ストップ|止め|とめ|保存|ほぞん|完了|かんりょう|おしまい)(?:します|して|て|る)?');
+const VM_CANCEL = new RegExp(VM_MEMO + '(?:取り消し|とりけし|取消|キャンセル|中止|ちゅうし|削除)(?:します|して|て)?');
+const VM_END_ALONE = /^(?:以上|終了|終わり|おわり)(?:です)?$/;
+function createVoiceMemo(opt){
+  const silence = (opt && opt.silence) || 10000, maxLen = (opt && opt.maxLen) || 120000;
+  let on = false, buf = [], since = 0, lastAt = 0;
+  const norm = t => String(t || '').replace(/[、。，．,.!！?？「」『』]/g, ' ').replace(/\s+/g, ' ').trim();
+  function close(type, auto){ on = false; const text = buf.join(' ').trim(); buf = [];
+    if (type === 'cancel') return { type:'cancel' };
+    return text ? { type:'save', text, auto:!!auto } : { type:'empty', auto:!!auto }; }
+  function feed(text, t){
+    const out = []; let s = norm(text);
+    while (s){
+      if (!on){
+        const m = s.match(VM_START); if (!m) break;
+        on = true; buf = []; since = lastAt = t; out.push({ type:'start' });
+        s = s.slice(m.index + m[0].length).trim();
+      } else {
+        if (VM_END_ALONE.test(s)){ out.push(close('save')); break; }
+        const hits = [s.match(VM_END), s.match(VM_CANCEL), s.match(VM_START)].map((m, k) => m && { m, k }).filter(Boolean).sort((a, b) => a.m.index - b.m.index);
+        if (!hits.length){ buf.push(s); lastAt = t; break; }
+        const h = hits[0], before = s.slice(0, h.m.index).trim();
+        if (before){ buf.push(before); lastAt = t; }
+        s = s.slice(h.m.index + h.m[0].length).trim();
+        if (h.k === 2){ lastAt = t; continue; }            // 録音中の「メモ開始」の言い直しは無視
+        out.push(close(h.k === 1 ? 'cancel' : 'save'));
+      }
+    }
+    return out;
+  }
+  function tick(t){ return on && (t - lastAt >= silence || t - since >= maxLen) ? [close('save', true)] : []; }
+  return { feed, tick, get on(){ return on; }, get text(){ return buf.join(' '); } };
 }
 
 /* 次の案内 */
@@ -1046,7 +1103,8 @@ if (typeof window !== 'undefined' && window.maplibregl){
   let audioCtx = null;
   function unlockAudio(){ try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch(e){} }
   // 音声セッションの種類：警告音は他の音と混ぜる（ambient）、読み上げは止めずに小さくする（transient）を試す
-  function setSession(type){ try { if (navigator.audioSession) navigator.audioSession.type = type; } catch(e){} }
+  let micBusy = false;   // 声の操作でマイクを使っている間は、音声セッションを切り替えない（聞き取りが止まるため）
+  function setSession(type){ if (micBusy) return; try { if (navigator.audioSession) navigator.audioSession.type = type; } catch(e){} }
   setSession('ambient');
   function beep(force){
     if (!force && !['beep', 'orbis', 'all'].includes(soundMode())) return;
@@ -1428,10 +1486,12 @@ if (typeof window !== 'undefined' && window.maplibregl){
     speak(routes[sel] ? '案内を開始します。' : 'オービス警告を開始します。', 'sys');
     await requestWake(); startDrTimer();
     rideStart();
+    if (voiceMode() !== 'off') voiceStart();
     if (!last || !last.pos) toast('現在地を取得中…');
     else handle(last, false);
   }
   function endNav(arrived){
+    voiceStop();
     rideEnd(arrived ? 'arrived' : 'ended');
     navOn = false; releaseWake(); stopDrTimer();
     $('orbisAlert').classList.remove('show');
@@ -1448,7 +1508,7 @@ if (typeof window !== 'undefined' && window.maplibregl){
     simOn = true; simS = 0; spokenM.clear(); cam.navZoom = null;
     eng.reset(); eng.setRoute(r, POINTS, layersOn);
     setState('nav'); setFollow(true); $('navStatus').textContent = '再生中';
-    requestWake(); startDrTimer();
+    requestWake(); startDrTimer(); if (voiceMode() !== 'off') voiceStart();
     const tick = 0.5;
     simTimer = setInterval(() => {
       const mult = +$('optSimSpeed').value, v = 16.7 * mult;
@@ -1462,7 +1522,7 @@ if (typeof window !== 'undefined' && window.maplibregl){
     }, tick * 1000);
   }
   function stopSim(){
-    simOn = false; clearInterval(simTimer); simTimer = null; stopDrTimer(); releaseWake();
+    simOn = false; clearInterval(simTimer); simTimer = null; stopDrTimer(); releaseWake(); voiceStop();
     $('orbisAlert').classList.remove('show');
     setState(routes.length ? 'preview' : 'idle'); if (routes.length){ renderPreview(); fitRoute(); }
   }
@@ -1514,10 +1574,12 @@ if (typeof window !== 'undefined' && window.maplibregl){
   // =========================================================
   //  追加機能②：速度取締り実施エリア（警視庁の月次PDFから作ったデータ）の道路を赤く
   // =========================================================
-  let speedData = null, speedLoading = false;
-  async function loadSpeed(){
-    if (speedData || speedLoading) return speedData;
-    speedLoading = true;
+  let speedData = null, speedLoading = null;
+  function loadSpeed(){   // 同時に呼ばれても1回だけ読み込み、全員が結果を受け取る
+    if (speedData) return Promise.resolve(speedData);
+    return speedLoading || (speedLoading = loadSpeed1());
+  }
+  async function loadSpeed1(){
     try {
       const res = await fetch('data/speed/latest.json', { cache:'no-cache' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -1525,12 +1587,13 @@ if (typeof window !== 'undefined' && window.maplibregl){
       speedData.areaFC = { type:'FeatureCollection', features: speedData.areas.map(a => ({ type:'Feature', properties:{ id:a.id }, geometry:a.geom })) };
       $('spdMonth').textContent = `${speedData.month.replace('-', '年')}月分・${speedData.areas.length}か所`;
     } catch(e){ $('spdMonth').textContent = '読み込めませんでした：' + e.message; }
-    finally { speedLoading = false; }
+    finally { speedLoading = null; }
     return speedData;
   }
   async function addSpeedLayers(){
     if (!P('speedArea')){ ['spd-roads', 'spd-line', 'spd-fill'].forEach(id => { if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none'); }); return; }
-    const d = await loadSpeed(); if (!d || !map.isStyleLoaded()) return;
+    const d = await loadSpeed(); if (!d) return;
+    if (!map.isStyleLoaded()){ map.once('idle', addSpeedLayers); return; }   // 地図の準備がまだなら、落ち着いてから描く
     const before = map.getLayer('route-alt') ? 'route-alt' : undefined;
     if (!map.getSource('spd-area')) map.addSource('spd-area', { type:'geojson', data:d.areaFC });
     if (!map.getSource('spd-roads')) map.addSource('spd-roads', { type:'geojson', data:d.roads });
@@ -1727,6 +1790,7 @@ if (typeof window !== 'undefined' && window.maplibregl){
   let rec = null;
   function openMemo(){
     try { speechSynthesis.cancel(); } catch(e){}
+    voicePause(true);
     $('memoText').value = ''; $('memoBox').hidden = false; closeSheets();
     if (SR) startRec(); else { $('memoState').textContent = 'キーボードのマイクで話すか、文字で入力してください'; $('memoText').focus(); }
   }
@@ -1743,18 +1807,138 @@ if (typeof window !== 'undefined' && window.maplibregl){
   $('btnMemo').onclick = openMemo;
   $('btnMemoIdle').onclick = openMemo;
   $('btnMemoMic').onclick = () => { if (SR){ try { rec && rec.abort(); } catch(e){} startRec(); } else $('memoText').focus(); };
-  $('btnMemoCancel').onclick = () => { try { rec && rec.abort(); } catch(e){} $('memoBox').hidden = true; };
+  $('btnMemoCancel').onclick = () => { try { rec && rec.abort(); } catch(e){} $('memoBox').hidden = true; voicePause(false); };
   $('btnMemoSave').onclick = () => {
     try { rec && rec.abort(); } catch(e){}
     const text = $('memoText').value.trim(); if (!text){ toast('メモが空です'); return; }
-    const memo = { kind:'memo', id:new Date().toISOString().replace(/[:.]/g, '-'), t:Date.now(), text, version:APP_VERSION, state,
+    saveMemo(text, 'screen');
+    $('memoBox').hidden = true; toast('メモを保存しました'); voicePause(false);
+  };
+  function saveMemo(text, via){
+    const memo = { kind:'memo', id:new Date().toISOString().replace(/[:.]/g, '-'), t:Date.now(), text, via, version:APP_VERSION, state,
       pos: last && last.pos ? [+last.pos.lat.toFixed(6), +last.pos.lon.toFixed(6)] : null, mode: last ? last.mode : null,
       along: last && last.along != null ? Math.round(last.along) : null, speed: last ? +(last.speed || 0).toFixed(1) : null,
       route:routeSummary(), recentSpoken:spokenLog.slice(-5), ride: ride.active ? ride.id : null, uploaded:false };
-    logEvent('memo', { text, id:memo.id });
+    logEvent('memo', { text, id:memo.id, via });
     saveLocal('memos', memo, 50);
-    $('memoBox').hidden = true; toast('メモを保存しました'); uploadPending();
-  };
+    uploadPending();
+  }
+
+  // ---- 声で操作（手袋のまま「メモ開始」「メモ終了」）----
+  // iPhoneは continuous を使うと固まることがあるため、1回ずつ聞き取って終わるたびに作り直す
+  const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const voice = { want:false, paused:false, r:null, timer:null, lastAct:0, fails:0, everOk:false, needTap:false, until:0, interim:'', vm:createVoiceMemo() };
+  const voiceMode = () => $('optVoice').value;
+  $('optVoice').value = prefs.voice || 'off';
+  $('voiceSt').textContent = SR ? '' : 'このブラウザは音声認識に対応していません';
+  $('optVoice').addEventListener('change', () => {
+    prefs.voice = $('optVoice').value; store.set('prefs', prefs);
+    if (voiceMode() === 'off'){ voiceStop(); return; }
+    if (!navOn && !simOn) voice.until = Date.now() + 20000;   // 試しに20秒だけ聞き取る（マイクの許可もここで）
+    voiceStart();
+  });
+  function voiceStatus(){
+    const rec = voice.vm.on, listening = voice.want && !voice.paused;
+    $('btnMemo').classList.toggle('listen', listening && !rec);
+    $('btnMemo').classList.toggle('recording', rec);
+    $('vmBanner').hidden = !rec;
+    if (rec) $('vmText').textContent = (voice.vm.text + ' ' + voice.interim).trim() || '話してください。「メモ終了」で保存します';
+    $('voiceSt').textContent = !SR ? 'このブラウザは音声認識に対応していません'
+      : voice.needTap ? '画面をタップすると聞き取りを再開します'
+      : listening ? (rec ? '録音中…' : '聞き取り中：「メモ開始」と言ってください') : '';
+  }
+  function cue(n){
+    if (voiceMode() !== 'beep') return;
+    try {
+      unlockAudio();
+      for (let i = 0; i < n; i++){
+        const t = audioCtx.currentTime + i * .2, o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.frequency.value = n === 1 ? 1320 : 990; o.connect(g); g.connect(audioCtx.destination);
+        g.gain.setValueAtTime(.22, t); g.gain.exponentialRampToValueAtTime(.001, t + .14); o.start(t); o.stop(t + .15);
+      }
+    } catch(e){}
+  }
+  function voiceStart(){
+    if (!SR){ toast('このブラウザは音声認識に対応していないため、声の操作は使えません', 4000); return; }
+    voice.want = true; voice.fails = 0; voice.needTap = false; voice.paused = !$('memoBox').hidden; micBusy = true;
+    try { if (navigator.audioSession) navigator.audioSession.type = 'auto'; } catch(e){}
+    logEvent('voice', { ev:'listen', ios:IOS });
+    if (!voice.r) voiceLoop();
+    voiceStatus();
+  }
+  function voiceStop(){
+    if (voice.vm.on) voiceHandle(voice.vm.tick(Infinity));   // 録音中なら、そこまでの内容を保存
+    voice.want = false; voice.until = 0; clearTimeout(voice.timer);
+    const r = voice.r; voice.r = null; try { r && r.abort(); } catch(e){}
+    micBusy = false; setSession('ambient');
+    voiceStatus();
+  }
+  function voicePause(p){
+    voice.paused = p;
+    if (p){ clearTimeout(voice.timer); const r = voice.r; voice.r = null; try { r && r.abort(); } catch(e){} }
+    else if (voice.want && !voice.r) voiceLoop();
+    voiceStatus();
+  }
+  function voiceLoop(){
+    clearTimeout(voice.timer);
+    if (!voice.want || voice.paused || voice.needTap || document.visibilityState === 'hidden') return;
+    let r; try { r = new SR(); } catch(e){ voiceStop(); toast('音声認識を開始できませんでした', 4000); return; }
+    r.lang = 'ja-JP'; r.interimResults = true; r.continuous = !IOS; r.maxAlternatives = 1;
+    voice.interim = '';
+    r.onstart = () => { voice.lastAct = Date.now(); };
+    r.onresult = e => {
+      voice.lastAct = Date.now(); voice.fails = 0;
+      if (!voice.everOk){ voice.everOk = true; logEvent('voice', { ev:'heard' }); }
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++){
+        const x = e.results[i]; if (x.isFinal) voiceFeed(x[0].transcript); else interim += x[0].transcript;
+      }
+      voice.interim = interim; voiceStatus();
+    };
+    r.onerror = e => {
+      if (e.error === 'no-speech' || e.error === 'aborted') return;
+      logEvent('voice', { ev:'error', err:e.error });
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed'){
+        if (voice.everOk){ voice.needTap = true; toast('画面をタップすると声の操作を再開します', 4000); }
+        else { voiceStop(); toast('マイク（音声認識）が許可されていないため、声の操作を止めました', 5000); }
+      } else voice.fails++;
+    };
+    r.onend = () => {
+      if (voice.interim){ const t = voice.interim; voice.interim = ''; voiceFeed(t); }   // 確定しないまま終わった分
+      if (voice.r !== r) return;
+      voice.r = null;
+      if (!voice.want) return;
+      voice.timer = setTimeout(voiceLoop, voice.fails ? Math.min(10000, 500 * 2 ** voice.fails) : 200);
+      voiceStatus();
+    };
+    voice.r = r; voice.lastAct = Date.now();
+    try { r.start(); } catch(e){ voice.r = null; voice.fails++; voice.timer = setTimeout(voiceLoop, 2000); }
+  }
+  function voiceFeed(text){ if (text && text.trim()) voiceHandle(voice.vm.feed(text, Date.now())); }
+  function voiceHandle(evs){
+    for (const ev of evs){
+      if (ev.type === 'start'){ cue(1); toast('メモ録音中：「メモ終了」で保存'); logEvent('voice', { ev:'memo-start' }); }
+      else if (ev.type === 'save'){ saveMemo(ev.text, 'voice'); cue(2); toast('メモを保存しました：' + ev.text.slice(0, 40), 4000); }
+      else if (ev.type === 'cancel'){ cue(3); toast('メモを取り消しました'); logEvent('voice', { ev:'memo-cancel' }); }
+      else if (ev.type === 'empty'){ cue(3); toast('メモが空だったので保存しませんでした'); logEvent('voice', { ev:'memo-empty' }); }
+    }
+    voiceStatus();
+  }
+  setInterval(() => {
+    if (!voice.want) return;
+    const now = Date.now();
+    if (voice.vm.on){ const ev = voice.vm.tick(now); if (ev.length) voiceHandle(ev); else voiceStatus(); }
+    if (voice.until && now > voice.until && !navOn && !simOn && !voice.vm.on){ voiceStop(); return; }
+    // 固まり対策：20秒以上なにも起きなければ作り直す
+    if (voice.r && !voice.paused && now - voice.lastAct > 20000){ const r = voice.r; voice.r = null; try { r.abort(); } catch(e){} logEvent('voice', { ev:'restart' }); voiceLoop(); }
+  }, 1000);
+  document.addEventListener('visibilitychange', () => {
+    if (!voice.want) return;
+    if (document.visibilityState === 'hidden'){ clearTimeout(voice.timer); const r = voice.r; voice.r = null; try { r && r.abort(); } catch(e){} }
+    else if (!voice.r) voiceLoop();
+  });
+  document.addEventListener('pointerdown', () => { if (voice.want && voice.needTap){ voice.needTap = false; voiceLoop(); voiceStatus(); } }, true);
+  window.__orbisNavi.voice = voice;
 
   // ---- 送信（GitHubの非公開リポジトリへ。トークンはこの端末だけ） ----
   const fbCfg = store.get('fbCfg', {}); $('fbRepo').value = fbCfg.repo || ''; $('fbToken').value = fbCfg.token || '';
@@ -1806,7 +1990,7 @@ if (typeof window !== 'undefined' && window.maplibregl){
 /* Nodeでのテスト用 */
 if (typeof module !== 'undefined') module.exports = { evaluate, dist, bearing, angDiff, decodePolyline6, buildRoute, locateOnRoute, nextManeuver, pointAt,
   pointsOnRoute, createEngine, inYamateTunnel, routeHeadingAt, streetsAt, distToLine, APPROACH, POINTS, LAYERS, PRESETS, cleanText, roadLabel,
-  shutokoToll, routeTolls };
+  shutokoToll, routeTolls, createVoiceMemo };
 </script>
 </body>
 </html>

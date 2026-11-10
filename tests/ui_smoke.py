@@ -26,6 +26,14 @@ async def main():
     async with async_playwright() as p:
         b = await p.chromium.launch(executable_path='/usr/bin/google-chrome', args=['--use-gl=swiftshader', '--enable-unsafe-swiftshader'])
         ctx = await b.new_context(viewport={'width':390, 'height':844}, geolocation={'latitude':35.7495, 'longitude':139.8040, 'accuracy':8}, permissions=['geolocation'])
+        # 音声認識の代わり（__say('…') で「話した」ことにする）
+        await ctx.add_init_script('''(() => { window.__srs = [];
+          class FakeSR { constructor(){ window.__srs.push(this); } start(){ this.started = true; setTimeout(() => this.onstart && this.onstart(), 5); }
+            stop(){ this._end(); } abort(){ this._end(); } _end(){ if (this.ended) return; this.ended = true; setTimeout(() => this.onend && this.onend(), 5); } }
+          window.SpeechRecognition = FakeSR; window.webkitSpeechRecognition = FakeSR;
+          window.__say = t => { const r = [...window.__srs].reverse().find(x => x.started && !x.ended); if (!r) return false;
+            const res = [{ transcript:t }]; res.isFinal = true; r.onresult && r.onresult({ resultIndex:0, results:[res] }); r._end(); return true; };
+        })()''')
         pg = await ctx.new_page(); errs = []
         pg.on('pageerror', lambda e: errs.append(str(e)))
         await pg.goto(url); await pg.wait_for_timeout(3000)
@@ -97,7 +105,29 @@ async def main():
         await pg.click('#btnRecenter'); await pg.wait_for_timeout(600)
         ok((await st())['follow'], '「再センター」で追従に戻る')
 
-        print('4. メモと走行記録')
+        print('4. 声でメモ（手袋のまま）')
+        await pg.evaluate("() => { const o = document.getElementById('optVoice'); o.value = 'quiet'; o.dispatchEvent(new Event('change')); }")
+        await pg.wait_for_timeout(500)
+        ok(await pg.evaluate("() => __orbisNavi.voice.want"), '「声で操作」を選ぶと聞き取りが始まる')
+        async def say(t):
+            for i in range(20):
+                if await pg.evaluate("t => __say(t)", t): break
+                await pg.wait_for_timeout(150)
+            await pg.wait_for_timeout(400)
+        await say('メモ開始')
+        ok(await pg.is_visible('#vmBanner'), '「メモ開始」で録音中の表示が出る')
+        await say('ここの案内が遅い')
+        ok('ここの案内が遅い' in await pg.inner_text('#vmText'), '話した内容が録音中の表示に出る')
+        await say('メモ終了')
+        memos = await pg.evaluate("() => JSON.parse(localStorage.getItem('memos')||'[]')")
+        ok(not await pg.is_visible('#vmBanner') and memos and memos[-1]['text'] == 'ここの案内が遅い' and memos[-1].get('via') == 'voice', '「メモ終了」で声のメモが保存される')
+        await say('メモ開始'); await say('取り消すメモ'); await say('メモ取り消し')
+        memos2 = await pg.evaluate("() => JSON.parse(localStorage.getItem('memos')||'[]')")
+        ok(len(memos2) == len(memos), '「メモ取り消し」では保存しない')
+        await say('今日は寒い')
+        ok(await pg.evaluate("() => __orbisNavi.voice.want && !__orbisNavi.voice.vm.on"), '普通の会話では録音が始まらず、聞き取りは続く')
+
+        print('5. メモと走行記録')
         await pg.click('#btnMemo'); await pg.wait_for_timeout(400)
         ok(await pg.is_visible('#memoBox'), 'メモ画面が開く')
         await pg.fill('#memoText', '自動テストのメモ'); await pg.click('#btnMemoSave'); await pg.wait_for_timeout(300)
@@ -106,8 +136,10 @@ async def main():
         ok(rides and len(rides[-1]['fixes']) > 5 and any(e['type'] == 'memo' for e in rides[-1]['events']), '走行記録とメモが保存される')
         played = [e for r in rides for e in r['events'] if e['type'] == 'speak' and e.get('played')]
         ok(not played, '「鳴らさない」設定（初期値）では音を出さない')
+        ok(not await pg.evaluate("() => __orbisNavi.voice.want"), '案内を終えると声の聞き取りも止まる')
+        ok(any(e['type'] == 'memo' and e.get('via') == 'voice' for e in rides[-1]['events']), '声のメモも走行記録に残る')
 
-        print('5. 二輪通行禁止の表示（模擬データ）')
+        print('6. 二輪通行禁止の表示（模擬データ）')
         n = await pg.evaluate("""() => __orbisNavi.motoTest({elements:[{type:'way',id:1,tags:{highway:'residential',name:'テスト通り',motorcycle:'no'},geometry:[{lat:35.75,lon:139.80},{lat:35.751,lon:139.801}]},
           {type:'way',id:2,tags:{highway:'tertiary','motorcycle:conditional':'no @ (22:00-06:00)'},geometry:[{lat:35.752,lon:139.80},{lat:35.753,lon:139.801}]}]})""")
         ok(n == 2 and await pg.evaluate("() => !!__orbisNavi.map.getLayer('moto-no')"), '規制のある道路が地図に描かれる')
