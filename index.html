@@ -328,6 +328,7 @@
   <div class="field"><label>送信先（GitHubの非公開リポジトリ）</label><input id="fbRepo" placeholder="ユーザー名/orbis-navi-feedback" autocomplete="off" autocapitalize="off"></div>
   <div class="field"><label>アクセストークン（この端末だけに保存）</label><input id="fbToken" type="password" placeholder="github_pat_..." autocomplete="off"></div>
   <button class="wide" id="btnFbTest">送信テスト</button>
+  <button class="wide" id="btnFbSend">未送信を今すぐ送る</button>
   <button class="wide" id="btnFbExport">走行記録とメモを書き出す</button>
   <div id="fbStatus" class="note"></div>
   <p class="note">案内を終えるたびに、走行記録（位置・判定・再検索・読み上げ）と改善メモを送信先へ保存します。未設定のときは端末に最新5回分を残します。走行記録には自宅付近の位置も含まれるため、送信先は必ず非公開にしてください。</p>
@@ -408,7 +409,7 @@ const PRESETS = {
   ]}
 };
 
-const APP_VERSION = '2026-11-10';
+const APP_VERSION = '2026-11-11';
 
 /* ===== 判定の設定 ===== */
 const HEADING_TOL = 60, AHEAD_TOL = 50, MIN_SPEED = 2;
@@ -1761,7 +1762,8 @@ if (typeof window !== 'undefined' && window.maplibregl){
   function rideStart(){
     if (!P('rideLog')) return;
     ride.active = true; ride.id = new Date().toISOString().replace(/[:.]/g, '-'); ride.startedAt = Date.now(); ride.fixes = []; ride.events = [];
-    logEvent('start', { route:routeSummary(), sound:soundMode(), ua:navigator.userAgent });
+    logEvent('start', { route:routeSummary(), sound:soundMode(), voice:$('optVoice').value, sr:!!(window.SpeechRecognition || window.webkitSpeechRecognition), ua:navigator.userAgent });
+    rideCheckpoint();
   }
   function rideFix(res, fix){
     if (!ride.active) return;
@@ -1776,9 +1778,27 @@ if (typeof window !== 'undefined' && window.maplibregl){
     logEvent('end', { reason });
     const rec = { kind:'ride', id:ride.id, startedAt:ride.startedAt, endedAt:Date.now(), version:APP_VERSION, events:ride.events, fixes:ride.fixes, uploaded:false };
     ride.active = false;
+    try { localStorage.removeItem('rideCur'); } catch(e){}
     saveLocal('rides', rec, 5);
     uploadPending();
   }
+  // 案内中の記録を30秒ごと・画面を離れるときに端末へ控えておく（タブを閉じた・Chromeが落ちた回も残すため）
+  function rideCheckpoint(){
+    if (!ride.active) return;
+    try { localStorage.setItem('rideCur', JSON.stringify({ kind:'ride', id:ride.id, startedAt:ride.startedAt, savedAt:Date.now(), version:APP_VERSION, events:ride.events, fixes:ride.fixes })); } catch(e){}
+  }
+  setInterval(rideCheckpoint, 30000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') rideCheckpoint(); });
+  window.addEventListener('pagehide', rideCheckpoint);
+  // 前回、終了ボタンを押さずに閉じた走行記録があれば、ここで締めて保存する
+  (function recoverRide(){
+    let cur = null; try { cur = JSON.parse(localStorage.getItem('rideCur') || 'null'); } catch(e){}
+    if (!cur || !cur.id) return;
+    cur.events.push({ t:cur.savedAt, type:'end', reason:'interrupted' });
+    const rec = { ...cur, endedAt:cur.savedAt, uploaded:false }; delete rec.savedAt;
+    if (!store.get('rides', []).some(r => r.id === rec.id)) saveLocal('rides', rec, 5);
+    try { localStorage.removeItem('rideCur'); } catch(e){}
+  })();
   function saveLocal(key, rec, keep){
     let arr = store.get(key, []); arr.push(rec);
     while (arr.length > keep) arr.shift();
@@ -1812,13 +1832,13 @@ if (typeof window !== 'undefined' && window.maplibregl){
     try { rec && rec.abort(); } catch(e){}
     const text = $('memoText').value.trim(); if (!text){ toast('メモが空です'); return; }
     saveMemo(text, 'screen');
-    $('memoBox').hidden = true; toast('メモを保存しました'); voicePause(false);
+    $('memoBox').hidden = true; toast(fbCfg.repo && fbCfg.token ? 'メモを保存しました（電波が悪いときは、戻ってから自動で送ります）' : 'メモを端末に保存しました（送信先が未設定です）', 3500); voicePause(false);
   };
   function saveMemo(text, via){
     const memo = { kind:'memo', id:new Date().toISOString().replace(/[:.]/g, '-'), t:Date.now(), text, via, version:APP_VERSION, state,
       pos: last && last.pos ? [+last.pos.lat.toFixed(6), +last.pos.lon.toFixed(6)] : null, mode: last ? last.mode : null,
       along: last && last.along != null ? Math.round(last.along) : null, speed: last ? +(last.speed || 0).toFixed(1) : null,
-      route:routeSummary(), recentSpoken:spokenLog.slice(-5), ride: ride.active ? ride.id : null, uploaded:false };
+      route:routeSummary(), recentSpoken:spokenLog.slice(-5), ride: ride.active ? ride.id : null, sr:!!SR, uploaded:false };
     logEvent('memo', { text, id:memo.id, via });
     saveLocal('memos', memo, 50);
     uploadPending();
@@ -1946,9 +1966,15 @@ if (typeof window !== 'undefined' && window.maplibregl){
   function b64(str){ const bytes = new TextEncoder().encode(str); let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(bin); }
   async function ghPut(path, obj){
     if (!fbCfg.repo || !fbCfg.token) throw new Error('送信先が未設定です');
-    const res = await fetch(`https://api.github.com/repos/${fbCfg.repo}/contents/${path}`, { method:'PUT',
-      headers:{ Authorization:`Bearer ${fbCfg.token}`, Accept:'application/vnd.github+json', 'Content-Type':'application/json' },
-      body:JSON.stringify({ message:`feedback: ${path}`, content:b64(JSON.stringify(obj)) }) });
+    const ac = new AbortController(), to = setTimeout(() => ac.abort(), 45000);   // 電波が悪くて返事が来ないとき、送信が止まったままにならないように
+    let res;
+    try {
+      res = await fetch(`https://api.github.com/repos/${fbCfg.repo}/contents/${path}`, { method:'PUT', signal:ac.signal,
+        headers:{ Authorization:`Bearer ${fbCfg.token}`, Accept:'application/vnd.github+json', 'Content-Type':'application/json' },
+        body:JSON.stringify({ message:`feedback: ${path}`, content:b64(JSON.stringify(obj)) }) });
+    } catch(e){ throw new Error(e.name === 'AbortError' ? '通信がタイムアウトしました' : '通信できませんでした'); }
+    finally { clearTimeout(to); }
+    if (res.status === 422) return;   // 同じファイルがもうある＝前回、送れていたのに返事だけ届かなかった
     if (!res.ok){ const t = await res.text().catch(() => ''); throw new Error(`HTTP ${res.status} ${t.slice(0, 80)}`); }
   }
   let uploading = false;
@@ -1967,20 +1993,37 @@ if (typeof window !== 'undefined' && window.maplibregl){
         if (err) break;
       }
     } finally { uploading = false; }
-    $('fbStatus').textContent = err ? `未送信があります：${err.message}` : (n ? `${n}件を送信しました` : '');
+    fbShow(err, n);
+    return { err, n };
   }
+  function pendingCount(){ return ['memos', 'rides'].reduce((c, k) => c + store.get(k, []).filter(r => !r.uploaded).length, 0); }
+  function fbShow(err, n){
+    const left = pendingCount();
+    if (err) store.set('fbLastErr', { t:Date.now(), msg:err.message });
+    else if (!left) store.set('fbLastErr', null);
+    const le = store.get('fbLastErr', null);
+    $('fbStatus').textContent = !fbCfg.repo || !fbCfg.token ? (left ? `端末に未送信が${left}件あります（送信先が未設定）` : '')
+      : left ? `未送信 ${left}件` + (le ? `（${new Date(le.t).toLocaleString('ja-JP')}：${le.msg}）。電波が戻ると自動で送ります` : '')
+      : (n ? `${n}件を送信しました。未送信はありません` : '未送信はありません');
+  }
+  // 送れなかった分は、1分ごと・電波が戻ったとき・アプリに戻ったときにやり直す
+  setInterval(() => { if (pendingCount() && navigator.onLine !== false) uploadPending(); }, 60000);
+  window.addEventListener('online', () => uploadPending());
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && pendingCount()) uploadPending(); });
   $('btnFbTest').onclick = async () => {
     fbCfg.repo = $('fbRepo').value.trim(); fbCfg.token = $('fbToken').value.trim(); store.set('fbCfg', fbCfg);
     $('fbStatus').textContent = '送信テスト中…';
     try { await ghPut(`test/${new Date().toISOString().replace(/[:.]/g, '-')}.json`, { kind:'test', t:Date.now(), version:APP_VERSION }); $('fbStatus').textContent = '送信できました。今後は自動で送信します。'; uploadPending(); }
     catch(e){ $('fbStatus').textContent = '送信できませんでした：' + e.message; }
   };
+  $('btnFbSend').onclick = async () => { $('fbStatus').textContent = '送信中…'; const r = await uploadPending(); if (!r) fbShow(null, 0); };
   $('btnFbExport').onclick = () => {
     const data = { exportedAt:new Date().toISOString(), version:APP_VERSION, memos:store.get('memos', []), rides:store.get('rides', []) };
     const blob = new Blob([JSON.stringify(data)], { type:'application/json' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `orbis-navi-feedback-${Date.now()}.json`; document.body.appendChild(a); a.click(); a.remove();
     toast('書き出しました（ファイルをチャットに添付してください）', 4000);
   };
+  fbShow(null, 0);
   setTimeout(uploadPending, 4000);
   window.__orbisNavi.getRide = () => ride; window.__orbisNavi.getAvoid = () => avoidRoads;
 

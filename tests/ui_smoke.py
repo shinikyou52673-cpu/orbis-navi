@@ -145,6 +145,34 @@ async def main():
         ok(n == 2 and await pg.evaluate("() => !!__orbisNavi.map.getLayer('moto-no')"), '規制のある道路が地図に描かれる')
         ok(await pg.evaluate("() => !!__orbisNavi.map.getLayer('spd-roads')"), '速度取締りエリアの道路が地図に描かれる')
 
+        print('7. 送れなかった分のやり直し、終了を押さずに閉じた走行記録')
+        await pg.click('#btnStart') if await pg.is_visible('#btnStart') else None
+        await pg.wait_for_timeout(500)
+        if (await st())['state'] != 'nav':
+            await pg.evaluate("() => document.getElementById('btnFree').click()"); await pg.wait_for_timeout(800)
+        for i in range(4):
+            la, lo = at(12 * i); await ctx.set_geolocation({'latitude':la, 'longitude':lo, 'accuracy':8}); await pg.wait_for_timeout(700)
+        await pg.evaluate("() => document.dispatchEvent(new Event('visibilitychange'))")   # 控えを取らせる（hidden 扱いでなくても30秒ごとに取る）
+        await pg.evaluate("() => window.dispatchEvent(new Event('pagehide'))")
+        cur = await pg.evaluate("() => JSON.parse(localStorage.getItem('rideCur')||'null')")
+        ok(bool(cur) and len(cur['fixes']) > 0, '案内中の走行記録が端末に控えられる')
+        await pg.evaluate("() => { const m = JSON.parse(localStorage.getItem('memos')||'[]'); m.forEach(x => x.uploaded = false); localStorage.setItem('memos', JSON.stringify(m)); localStorage.setItem('fbCfg', JSON.stringify({repo:'test/feedback', token:'dummy'})); }")
+        puts = []; state_ = {'n': 0}
+        async def gh(route):
+            state_['n'] += 1; puts.append(route.request.url.split('/contents/')[-1])
+            if state_['n'] == 1: await route.abort()                  # 1回目は電波が無い
+            elif state_['n'] == 2: await route.fulfill(status=422, body='{}')   # 2回目は「もうある」
+            else: await route.fulfill(status=201, body='{}')
+        await ctx.route('https://api.github.com/**', gh)
+        await pg.reload(); await pg.wait_for_timeout(6000)              # タブを閉じて開き直した想定
+        rides = await pg.evaluate("() => JSON.parse(localStorage.getItem('rides')||'[]')")
+        ok(any(r['id'] == cur['id'] and r['events'][-1].get('reason') == 'interrupted' for r in rides), '終了を押さずに閉じた回の走行記録が、次に開いたとき保存される')
+        ok(not await pg.evaluate("() => localStorage.getItem('rideCur')"), '控えは保存後に消える')
+        await pg.evaluate("() => window.dispatchEvent(new Event('online'))"); await pg.wait_for_timeout(3000)
+        left = await pg.evaluate("() => ['memos','rides'].reduce((c,k)=>c+JSON.parse(localStorage.getItem(k)||'[]').filter(r=>!r.uploaded).length,0)")
+        ok(left == 0 and any(u.startswith('memos/') for u in puts) and any(u.startswith('rides/') for u in puts), f'送信に失敗しても、電波が戻るとやり直して全部送る（送信{len(puts)}回）')
+        ok('未送信はありません' in await pg.inner_text('#fbStatus'), '設定に「未送信はありません」と出る')
+
         ok(not errs, 'ページのエラーがない' + ('' if not errs else '：' + errs[0][:120]))
         await b.close()
     srv.shutdown()
