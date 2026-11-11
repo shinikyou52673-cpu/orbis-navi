@@ -305,6 +305,8 @@
       <option value="quiet">使う（合図の音なし）</option>
       <option value="beep">使う（合図の音あり）</option>
     </select></div>
+  <button class="wide" id="btnMicTest">マイクと音声認識のテスト</button>
+  <div id="micTestOut" class="note"></div>
   <p class="note">案内中はマイクで聞き取りを続けます。「メモ開始」と言うと録音を始め、「メモ終了」と言うと保存します。やめるときは「メモ取り消し」です。「メモ終了」を言い忘れても、10秒黙ると自動で保存します。録音中は画面上部が赤くなり、メモボタンが赤く点滅します。<br><b>注意：</b>iPhoneでは、マイクを使っている間、ほかのアプリの音楽が小さくなるか止まることがあります。画面を消したり別のアプリに切り替えたりすると聞き取りは止まります。初めて使うときは、走る前にここで選んで、マイクの許可を済ませてください（選ぶと20秒だけ試しに聞き取ります）。</p>
   <h3>オービス表示</h3>
   <div id="layerRows"></div>
@@ -1106,7 +1108,9 @@ if (typeof window !== 'undefined' && window.maplibregl){
   // 音声セッションの種類：警告音は他の音と混ぜる（ambient）、読み上げは止めずに小さくする（transient）を試す
   let micBusy = false;   // 声の操作でマイクを使っている間は、音声セッションを切り替えない（聞き取りが止まるため）
   function setSession(type){ if (micBusy) return; try { if (navigator.audioSession) navigator.audioSession.type = type; } catch(e){} }
-  setSession('ambient');
+  // マイクを使う前は必ず 'auto' に戻す。'ambient' のままだとマイクの入力が切られ、何も聞き取れない（規格：play-and-record か auto 以外では録音が止まる）
+  function micOpen(){ micBusy = true; try { if (navigator.audioSession) navigator.audioSession.type = 'auto'; } catch(e){} }
+  function micClose(){ if (typeof voice !== 'undefined' && voice.want) return; micBusy = false; }
   function beep(force){
     if (!force && !['beep', 'orbis', 'all'].includes(soundMode())) return;
     try {
@@ -1815,12 +1819,13 @@ if (typeof window !== 'undefined' && window.maplibregl){
     if (SR) startRec(); else { $('memoState').textContent = 'キーボードのマイクで話すか、文字で入力してください'; $('memoText').focus(); }
   }
   function startRec(){
+    micOpen();
     try {
       rec = new SR(); rec.lang = 'ja-JP'; rec.interimResults = true; rec.continuous = false;
       const base = $('memoText').value ? $('memoText').value + ' ' : '';
       rec.onresult = e => { let t = ''; for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript; $('memoText').value = base + t; };
       rec.onerror = e => { $('memoState').className = ''; $('memoState').textContent = e.error === 'not-allowed' ? 'マイクが許可されていません。キーボードのマイクか文字で入力してください' : '聞き取れませんでした。もう一度「話す」を押すか、文字で入力してください'; };
-      rec.onend = () => { $('memoState').className = ''; if ($('memoText').value) $('memoState').textContent = '内容を確認して「保存」を押してください'; };
+      rec.onend = () => { micClose(); $('memoState').className = ''; if ($('memoText').value) $('memoState').textContent = '内容を確認して「保存」を押してください'; };
       rec.start(); $('memoState').className = 'rec'; $('memoState').textContent = '● 聞き取り中…話してください';
     } catch(e){ $('memoState').textContent = 'キーボードのマイクで話すか、文字で入力してください'; $('memoText').focus(); }
   }
@@ -1880,8 +1885,7 @@ if (typeof window !== 'undefined' && window.maplibregl){
   }
   function voiceStart(){
     if (!SR){ toast('このブラウザは音声認識に対応していないため、声の操作は使えません', 4000); return; }
-    voice.want = true; voice.fails = 0; voice.needTap = false; voice.paused = !$('memoBox').hidden; micBusy = true;
-    try { if (navigator.audioSession) navigator.audioSession.type = 'auto'; } catch(e){}
+    voice.want = true; voice.fails = 0; voice.needTap = false; voice.paused = !$('memoBox').hidden; micOpen();
     logEvent('voice', { ev:'listen', ios:IOS });
     if (!voice.r) voiceLoop();
     voiceStatus();
@@ -1890,7 +1894,7 @@ if (typeof window !== 'undefined' && window.maplibregl){
     if (voice.vm.on) voiceHandle(voice.vm.tick(Infinity));   // 録音中なら、そこまでの内容を保存
     voice.want = false; voice.until = 0; clearTimeout(voice.timer);
     const r = voice.r; voice.r = null; try { r && r.abort(); } catch(e){}
-    micBusy = false; setSession('ambient');
+    micBusy = false;
     voiceStatus();
   }
   function voicePause(p){
@@ -1931,7 +1935,7 @@ if (typeof window !== 'undefined' && window.maplibregl){
       voice.timer = setTimeout(voiceLoop, voice.fails ? Math.min(10000, 500 * 2 ** voice.fails) : 200);
       voiceStatus();
     };
-    voice.r = r; voice.lastAct = Date.now();
+    voice.r = r; voice.lastAct = Date.now(); micOpen();
     try { r.start(); } catch(e){ voice.r = null; voice.fails++; voice.timer = setTimeout(voiceLoop, 2000); }
   }
   function voiceFeed(text){ if (text && text.trim()) voiceHandle(voice.vm.feed(text, Date.now())); }
@@ -1959,6 +1963,57 @@ if (typeof window !== 'undefined' && window.maplibregl){
   });
   document.addEventListener('pointerdown', () => { if (voice.want && voice.needTap){ voice.needTap = false; voiceLoop(); voiceStatus(); } }, true);
   window.__orbisNavi.voice = voice;
+
+  // ---- マイクと音声認識のテスト（どこで止まっているかを切り分けて、送信先にも残す）----
+  $('btnMicTest').onclick = async () => {
+    const out = $('micTestOut'), btn = $('btnMicTest');
+    const d = { kind:'diag', id:new Date().toISOString().replace(/[:.]/g, '-'), t:Date.now(), version:APP_VERSION, ua:navigator.userAgent,
+      sr:!!SR, audioSessionBefore: navigator.audioSession ? navigator.audioSession.type : null, gum:null, level:null, device:null, srEvents:[], srText:'', srError:null };
+    btn.disabled = true;
+    const voiceWas = voice.want; if (voiceWas) voicePause(true);
+    micOpen();
+    // 1) マイクの音量（3秒）
+    out.textContent = '① 3秒間、何か話してください（マイクの音量を測ります）…';
+    try {
+      const st = await navigator.mediaDevices.getUserMedia({ audio:true });
+      const tr = st.getAudioTracks()[0]; d.device = tr ? tr.label : null;
+      const ac = new (window.AudioContext || window.webkitAudioContext)(); await ac.resume();
+      const an = ac.createAnalyser(); an.fftSize = 1024; ac.createMediaStreamSource(st).connect(an);
+      const buf = new Float32Array(an.fftSize); let max = 0;
+      for (let i = 0; i < 30; i++){
+        await new Promise(r => setTimeout(r, 100)); an.getFloatTimeDomainData(buf);
+        let sum = 0; for (const v of buf) sum += v * v; max = Math.max(max, Math.sqrt(sum / buf.length));
+        out.textContent = `① 3秒間、何か話してください… 音量 ${'■'.repeat(Math.min(10, Math.round(max * 60)))}`;
+      }
+      d.gum = 'ok'; d.level = +max.toFixed(4); d.trackEnded = tr ? tr.readyState === 'ended' : null;
+      st.getTracks().forEach(t => t.stop()); ac.close().catch(() => {});
+    } catch(e){ d.gum = `${e.name}: ${e.message}`; }
+    // 2) 音声認識（最長8秒）
+    if (SR){
+      out.textContent = '② 「テスト」と話してください（音声認識を試します）…';
+      micOpen();
+      await new Promise(resolve => {
+        let done = false; const fin = () => { if (!done){ done = true; resolve(); } };
+        let r; try { r = new SR(); } catch(e){ d.srError = 'create: ' + e.message; fin(); return; }
+        r.lang = 'ja-JP'; r.interimResults = true; r.continuous = false;
+        ['start', 'audiostart', 'soundstart', 'speechstart', 'speechend', 'soundend', 'audioend', 'nomatch'].forEach(ev => r['on' + ev] = () => d.srEvents.push(ev));
+        r.onresult = e => { let t = ''; for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript; d.srText = t; d.srEvents.push('result'); out.textContent = `② 聞き取り中：「${t}」`; };
+        r.onerror = e => { d.srError = e.error; d.srEvents.push('error:' + e.error); };
+        r.onend = () => { d.srEvents.push('end'); fin(); };
+        try { r.start(); } catch(e){ d.srError = 'start: ' + e.message; fin(); return; }
+        setTimeout(() => { if (!done){ d.srEvents.push('timeout'); try { r.abort(); } catch(e){} setTimeout(fin, 500); } }, 8000);
+      });
+    }
+    d.audioSessionAfter = navigator.audioSession ? navigator.audioSession.type : null;
+    micClose(); if (voiceWas) voicePause(false);
+    // 結果
+    const mic = d.gum !== 'ok' ? `使えません（${d.gum}）` : d.level > 0.01 ? `反応あり（音量 ${d.level}）` : `反応なし（音量 ${d.level}。音が入っていません）`;
+    const srs = !SR ? 'このブラウザにはありません' : d.srText ? `聞き取れました：「${d.srText}」` : d.srError ? `エラー（${d.srError}）` : d.srEvents.includes('timeout') ? '返事がありません（止まったまま）' : '何も聞き取れませんでした';
+    out.innerHTML = `マイク：${mic}<br>音声認識：${srs}<br><small>入力：${d.device || '不明'}／経過：${d.srEvents.join('→') || 'なし'}</small>`;
+    saveLocal('diags', d, 10);
+    if (fbCfg.repo && fbCfg.token){ try { await ghPut(`diag/${d.id.slice(0, 10)}/${d.id}.json`, d); out.innerHTML += '<br>結果を送信しました'; } catch(e){ out.innerHTML += '<br>結果を送信できませんでした：' + e.message; } }
+    btn.disabled = false;
+  };
 
   // ---- 送信（GitHubの非公開リポジトリへ。トークンはこの端末だけ） ----
   const fbCfg = store.get('fbCfg', {}); $('fbRepo').value = fbCfg.repo || ''; $('fbToken').value = fbCfg.token || '';

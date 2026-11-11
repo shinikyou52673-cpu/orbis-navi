@@ -24,8 +24,8 @@ async def main():
     from playwright.async_api import async_playwright
     srv = serve(); url = f'http://127.0.0.1:{srv.server_address[1]}/index.html'
     async with async_playwright() as p:
-        b = await p.chromium.launch(executable_path='/usr/bin/google-chrome', args=['--use-gl=swiftshader', '--enable-unsafe-swiftshader'])
-        ctx = await b.new_context(viewport={'width':390, 'height':844}, geolocation={'latitude':35.7495, 'longitude':139.8040, 'accuracy':8}, permissions=['geolocation'])
+        b = await p.chromium.launch(executable_path='/usr/bin/google-chrome', args=['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'])
+        ctx = await b.new_context(viewport={'width':390, 'height':844}, geolocation={'latitude':35.7495, 'longitude':139.8040, 'accuracy':8}, permissions=['geolocation', 'microphone'])
         # 音声認識の代わり（__say('…') で「話した」ことにする）
         await ctx.add_init_script('''(() => { window.__srs = [];
           class FakeSR { constructor(){ window.__srs.push(this); } start(){ this.started = true; setTimeout(() => this.onstart && this.onstart(), 5); }
@@ -172,6 +172,18 @@ async def main():
         left = await pg.evaluate("() => ['memos','rides'].reduce((c,k)=>c+JSON.parse(localStorage.getItem(k)||'[]').filter(r=>!r.uploaded).length,0)")
         ok(left == 0 and any(u.startswith('memos/') for u in puts) and any(u.startswith('rides/') for u in puts), f'送信に失敗しても、電波が戻るとやり直して全部送る（送信{len(puts)}回）')
         ok('未送信はありません' in await pg.inner_text('#fbStatus'), '設定に「未送信はありません」と出る')
+
+        print('8. マイクと音声認識のテスト')
+        await pg.evaluate("() => document.getElementById('btnMicTest').click()")
+        for i in range(30):
+            await pg.wait_for_timeout(700)
+            if '音声認識：' in await pg.inner_text('#micTestOut'): break
+        txt = await pg.inner_text('#micTestOut')
+        ok('マイク：' in txt and '音声認識：' in txt, 'テスト結果（マイク・音声認識）が表示される：' + txt.replace('\n', ' ')[:80])
+        dg = await pg.evaluate("() => JSON.parse(localStorage.getItem('diags')||'[]')")
+        ok(dg and dg[-1]['gum'] == 'ok' and dg[-1]['srEvents'], 'テスト結果が端末に残る')
+        await pg.wait_for_timeout(1500)
+        ok(any(u.startswith('diag/') for u in puts), 'テスト結果を送信先に送る')
 
         ok(not errs, 'ページのエラーがない' + ('' if not errs else '：' + errs[0][:120]))
         await b.close()
