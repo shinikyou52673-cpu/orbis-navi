@@ -137,6 +137,26 @@ ok(Math.round((150 + 32.472 * 20) * 1.1 / 10) * 10 === 880, '首都高：普通�
   ok(tl.total === tl.shutoko.reduce((s, x) => s + M.shutokoToll(x.km), 0), '首都高：合計が各回の合計と一致');
 }
 
+/* ---- 2b'. 首都高の料金：有料・自動車専用の印があるルート（路線記号だけの区間も続きとして数える） ---- */
+{
+  const j = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'c2in.json'), 'utf8'));
+  const coords = j.shape.map(([lat, lon]) => ({ lat, lon })); const cum = [0];
+  for (let i = 1; i < coords.length; i++) cum.push(cum[i-1] + M.dist(coords[i-1], coords[i]));
+  const n = coords.length, q = Math.floor(n / 6);
+  const R = { coords, cum, maneuvers:[
+    { begin:0,   streets:['4', '昭和通り', '一般国道4号'] },
+    { begin:q,   streets:['首都高速1号上野線'], toll:true, hwy:true },
+    { begin:2*q, streets:['11'], hwy:true },                       // 印が「自動車専用」だけ・名前は記号だけ
+    { begin:3*q, streets:['B'], toll:true, hwy:true },             // 名前は記号だけ
+    { begin:4*q, streets:[], toll:true },                           // 出口
+    { begin:4*q + 3, streets:['環七通り'] } ] };
+  const tl = M.routeTolls(R), km = (cum[4*q + 3] - cum[q]) / 1000;
+  ok(tl.shutoko.length === 1 && Math.abs(tl.shutoko[0].km - km) < 0.05, `首都高：路線記号だけの区間も1回の利用として続けて数える（${tl.shutoko.length}回・${tl.shutoko[0] ? tl.shutoko[0].km.toFixed(1) : '-'}km／正しくは${km.toFixed(1)}km）`);
+  const R2 = { coords, cum, maneuvers:[{ begin:0, streets:['一般道'] }, { begin:q, streets:['E83', '第三京浜道路'], toll:true, hwy:true }, { begin:3*q, streets:['一般道'] }] };
+  const t2 = M.routeTolls(R2);
+  ok(t2.shutoko.length === 0 && t2.others.length === 1, '首都高以外の有料道路は、首都高の料金に含めず「未対応」に回す');
+}
+
 /* ---- 2c. 声でメモ ---- */
 {
   const V = () => M.createVoiceMemo({ silence:10000 });
@@ -158,6 +178,33 @@ ok(Math.round((150 + 32.472 * 20) * 1.1 / 10) * 10 === 880, '首都高：普通�
   v = V(); v.feed('メモ開始', 0); e = v.tick(11000); ok(e.length === 1 && e[0].type === 'empty', '声メモ：何も言わなければ空として終わる');
   v = V(); v.feed('メモ開始', 0); v.feed('ここ', 1000); v.feed('メモ開始 遅い', 2000); e = v.feed('メモ終了', 3000);
   ok(e[0].type === 'save' && e[0].text === 'ここ 遅い', '声メモ：録音中の「メモ開始」の言い直しは本文に入れない');
+}
+
+/* ---- 2d. 検索結果のまとめ・自動車専用道路の回避地点 ---- */
+{
+  ok(M.looksAddress('墨田区石原1-1') && M.looksAddress('新宿3丁目') && M.looksAddress('東京都千代田区丸の内１丁目９−１'), '検索：番地までの住所を住所と判定する');
+  ok(!M.looksAddress('東京タワー') && !M.looksAddress('羽田空港第1ターミナル') && !M.looksAddress('セブンイレブン 梅島') && !M.looksAddress('道の駅 八王子滝山'), '検索：施設名を住所と判定しない');
+  const here = { lat:35.70, lon:139.76 };
+  const n = [{ lat:'35.6586', lon:'139.7454', name:'東京タワー', display_name:'東京タワー, 芝公園四丁目, 港区, 東京都' }];
+  const ph = { features:[
+    { properties:{ countrycode:'JP', name:'東京タワー', osm_value:'tower', state:'東京都' }, geometry:{ coordinates:[139.7455, 35.6587] } },
+    { properties:{ countrycode:'JP', name:'東京タワー', osm_value:'bus_stop', state:'東京都' }, geometry:{ coordinates:[139.7480, 35.6570] } },
+    { properties:{ countrycode:'US', name:'Tokyo Tower Cafe' }, geometry:{ coordinates:[-100, 40] } } ] };
+  const g = [{ geometry:{ coordinates:[141.35, 43.06] }, properties:{ title:'北海道札幌市東区' } }, { geometry:{ coordinates:[139.7985, 35.7003] }, properties:{ title:'東京都墨田区石原一丁目１番' } }];
+  const a = M.mergePlaces(n, ph, null, here, false);
+  ok(a.length === 2 && a[0].src === 'n' && a[1].weak, `検索：同じ場所の重複をまとめ、バス停などは後ろに回す（${a.length}件）`);
+  const b = M.mergePlaces(n, null, g, here, true);
+  ok(b[0].src === 'g' && b[0].name.includes('石原') && !b.some(x => x.name.includes('札幌')), '検索：住所の検索では国土地理院の結果を先頭にし、遠すぎる地名は外す');
+  ok(M.mergePlaces(null, null, null, here, false).length === 0, '検索：どの検索先も空なら0件');
+
+  const j = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'c2in.json'), 'utf8'));
+  const coords = j.shape.map(([lat, lon]) => ({ lat, lon })); const cum = [0];
+  for (let i = 1; i < coords.length; i++) cum.push(cum[i-1] + M.dist(coords[i-1], coords[i]));
+  const q = Math.floor(coords.length / 4);
+  const R = { coords, cum, maneuvers:[{ begin:0, streets:['一般道'], hwy:false }, { begin:q, streets:['無料の自動車専用道路'], hwy:true }, { begin:2*q, streets:['一般道'], hwy:false }] };
+  const locs = M.hwyLocs(R), lenKm = (cum[2*q] - cum[q]) / 1000;
+  ok(locs.length >= 1 && locs.length <= Math.ceil(lenKm) + 1 && locs.every(l => l.search_filter.min_road_class === 'motorway'), `自動車専用道路の区間だけに、避ける地点を約1kmおきに置く（${locs.length}か所／${lenKm.toFixed(1)}km）`);
+  ok(M.hwyLocs({ coords, cum, maneuvers:[{ begin:0, streets:['一般道'] }] }).length === 0, '自動車専用道路が無ければ、避ける地点は作らない');
 }
 
 /* ---- 3. 速度取締りエリアのデータ（警視庁 月次） ---- */

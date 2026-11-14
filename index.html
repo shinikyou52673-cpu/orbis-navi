@@ -151,7 +151,10 @@
   .field{padding:8px 0;border-bottom:1px solid var(--line)}
   .field label{display:block;font-size:13px;color:var(--sub);margin-bottom:4px}
   .field input{width:100%;height:42px;border-radius:10px;border:1px solid var(--line);background:var(--card2);color:var(--text);font-size:15px;padding:0 10px}
-  #pvAvoid{flex-wrap:wrap}
+  #pvAvoid{flex-wrap:nowrap}
+  #pvAvoid .chip{white-space:nowrap}
+  #pvChips .chip{flex:1 1 0;min-width:0}
+  #pvChips .chip small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #pvAvoid .chip{padding:6px 10px;font-size:13px;border-radius:999px}
   #pvAvoid .chip.on{background:color-mix(in srgb, var(--danger) 14%, var(--card));border-color:var(--danger);color:var(--danger)}
   #btnMemo{right:14px;width:56px;height:56px;border-radius:28px;font-size:13px;font-weight:800;flex-direction:column;gap:0}
@@ -266,7 +269,7 @@
   <p class="note">地図を長押しすると「ここへ行く」や経由地の追加ができます。地図上のピンはドラッグで動かせます。</p>
   <h3>オプション</h3>
   <div class="row"><span>周回（最後に出発地へ戻る）</span><input type="checkbox" id="optLoop"></div>
-  <div class="row"><span>高速・有料道路を使わない</span><input type="checkbox" id="optNoHwy"></div>
+  <div class="row"><span>高速・有料道路を使わない<br><small style="color:var(--sub)">無料の自動車専用道路も避けます（125cc以下など）</small></span><input type="checkbox" id="optNoHwy"></div>
   <h3>プリセット</h3>
   <button class="wide" id="btnPresetC2in">C2内回り 1周（足立発着）</button>
   <button class="wide primary" id="btnCalc">ルートを検索</button>
@@ -306,8 +309,9 @@
       <option value="beep">使う（合図の音あり）</option>
     </select></div>
   <button class="wide" id="btnMicTest">マイクと音声認識のテスト</button>
+  <button class="wide" id="btnMicCopy" hidden>結果をコピー（チャットに貼る用）</button>
   <div id="micTestOut" class="note"></div>
-  <p class="note">案内中はマイクで聞き取りを続けます。「メモ開始」と言うと録音を始め、「メモ終了」と言うと保存します。やめるときは「メモ取り消し」です。「メモ終了」を言い忘れても、10秒黙ると自動で保存します。録音中は画面上部が赤くなり、メモボタンが赤く点滅します。<br><b>注意：</b>iPhoneでは、マイクを使っている間、ほかのアプリの音楽が小さくなるか止まることがあります。画面を消したり別のアプリに切り替えたりすると聞き取りは止まります。初めて使うときは、走る前にここで選んで、マイクの許可を済ませてください（選ぶと20秒だけ試しに聞き取ります）。</p>
+  <p class="note">案内中はマイクで聞き取りを続けます。「メモ開始」と言うと録音を始め、「メモ終了」と言うと保存します。やめるときは「メモ取り消し」です。「メモ終了」を言い忘れても、10秒黙ると自動で保存します。録音中は画面上部が赤くなり、メモボタンが赤く点滅します。<br><b>注意：</b>iPhoneでは、マイクを使っている間、ほかのアプリの音楽が小さくなるか止まることがあります。Bluetoothのインカムやイヤホンは、マイクを使っている間は「通話用」の接続に切り替わるため、音楽の音質が大きく下がります。音楽を聴きながら使うなら、下の「Siriでメモ」のほうが向いています。画面を消したり別のアプリに切り替えたりすると聞き取りは止まります。初めて使うときは、走る前にここで選んで、マイクの許可を済ませてください（選ぶと20秒だけ試しに聞き取ります）。<br>聞き取れないときは、iPhoneの「設定」で次の2つを確かめてください：①「一般 → キーボード → 音声入力」がオン　②「アプリ → Chrome → マイク」と「音声認識」がオン</p>
   <h3>オービス表示</h3>
   <div id="layerRows"></div>
   <h3>二輪の通行規制</h3>
@@ -332,8 +336,29 @@
   <button class="wide" id="btnFbTest">送信テスト</button>
   <button class="wide" id="btnFbSend">未送信を今すぐ送る</button>
   <button class="wide" id="btnFbExport">走行記録とメモを書き出す</button>
+  <button class="wide" id="btnFbLink">送信設定を別の端末に移すリンクをコピー</button>
   <div id="fbStatus" class="note"></div>
   <p class="note">案内を終えるたびに、走行記録（位置・判定・再検索・読み上げ）と改善メモを送信先へ保存します。未設定のときは端末に最新5回分を残します。走行記録には自宅付近の位置も含まれるため、送信先は必ず非公開にしてください。</p>
+  <p class="note">送信先の設定は、ブラウザごとに別々です（パソコンのChromeで設定しても、iPhoneのChromeには入りません。iPhoneでもSafariとChromeは別です）。上のリンクをコピーして、使うブラウザで開くと設定が入ります。リンクにはアクセストークンが含まれるので、自分以外には送らないでください。</p>
+  <h3>Siriでメモ（インカムのボタンで・手袋のまま）</h3>
+  <details id="siriHelp"><summary style="padding:8px 0;font-weight:600">iPhoneの「ショートカット」で作る手順を見る</summary>
+  <p class="note">「Hey Siri、ナビメモ」またはインカムのSiriボタン →「ナビメモ」と言うと、話した内容が送信先に届きます。画面を触らず、画面が消えていても使えます。音楽が止まるのは、話している数秒だけです。<br>
+  <b>作り方（ショートカットApp →「＋」→ 名前を「ナビメモ」に）</b><br>
+  ① アクション「<b>テキストを音声入力</b>」を追加（言語：日本語、聞き取りを停止：一時停止後）<br>
+  ② 「<b>日付</b>」（現在の日付）→「<b>日付をフォーマット</b>」（カスタム：<code>yyyy-MM-dd_HH-mm-ss</code>）<br>
+  ③ 「<b>Base64エンコード</b>」（入力：①の音声入力されたテキスト、改行：なし）<br>
+  ④ 「<b>URLの内容を取得</b>」<br>
+  　・URL：下の「URLをコピー」の内容を貼り、末尾の <code>.txt</code> の前に②の「フォーマット済みの日付」を入れる<br>
+  　・方法：<b>PUT</b><br>
+  　・ヘッダ：<code>Authorization</code> ＝ 下の「Authorizationをコピー」の内容<br>
+  　・本文を要求：<b>JSON</b>、項目を2つ追加<br>
+  　　<code>message</code>（テキスト）＝ <code>siri memo</code><br>
+  　　<code>content</code>（テキスト）＝ ③の「Base64エンコード済み」<br>
+  ⑤ （任意）「<b>通知を表示</b>」＝ メモしました<br>
+  アクションの名前は、iOSのバージョンで少し違うことがあります。</p>
+  <button class="wide" id="btnSiriUrl">URLをコピー</button>
+  <button class="wide" id="btnSiriAuth">Authorizationをコピー</button>
+  </details>
   <h3>オービス位置の修正</h3>
   <div class="row"><span>ピンをドラッグして修正する</span><input type="checkbox" id="optEdit"></div>
   <button class="wide" id="btnExport">修正した位置を書き出す</button>
@@ -411,7 +436,7 @@ const PRESETS = {
   ]}
 };
 
-const APP_VERSION = '2026-11-11';
+const APP_VERSION = '2026-11-14';
 
 /* ===== 判定の設定 ===== */
 const HEADING_TOL = 60, AHEAD_TOL = 50, MIN_SPEED = 2;
@@ -497,14 +522,15 @@ function buildRoute(trip){
     (leg.maneuvers || []).forEach(m => {
       maneuvers.push({ type:m.type, text:cleanText(m.instruction || ''), begin:m.begin_shape_index + offset,
         streets:m.street_names || [], verbal:cleanText(m.verbal_pre_transition_instruction || ''),
-        alert:cleanText(m.verbal_transition_alert_instruction || '') });
+        alert:cleanText(m.verbal_transition_alert_instruction || ''), toll:!!m.toll, hwy:!!m.highway });
       const nm = roadLabel(m.street_names || []);
       if (nm && roads[roads.length-1] !== nm && !roads.includes(nm)) roads.push(nm);
     });
   });
   const cum = [0];
   for (let i = 1; i < coords.length; i++) cum.push(cum[i-1] + dist(coords[i-1], coords[i]));
-  return { coords, cum, maneuvers, roads, length:trip.summary.length*1000, time:trip.summary.time };
+  return { coords, cum, maneuvers, roads, length:trip.summary.length*1000, time:trip.summary.time,
+    hasToll:maneuvers.some(m => m.toll), hasHwy:maneuvers.some(m => m.hwy) };
 }
 
 /* ルート上の位置。from〜toの添字範囲を探す */
@@ -567,6 +593,28 @@ const TOLL_RE = /首都高|高速|自動車道|有料|第三京浜|第二京浜�
 function routeTolls(route){
   const trips = []; const others = [];
   let cur = null;
+  const segKm = i => { const m = route.maneuvers[i], a = m.begin, b = i + 1 < route.maneuvers.length ? route.maneuvers[i+1].begin : route.coords.length - 1;
+    return (route.cum[Math.min(b, route.cum.length-1)] - route.cum[Math.min(a, route.cum.length-1)]) / 1000; };
+  if (route.maneuvers.some(m => m.toll || m.hwy)){
+    // 印があるルート：有料・自動車専用が続く区間を1回の利用とみなす。
+    // 首都高の本線は、案内の名前が路線記号だけ（「B」「11」など）のことがあるので、名前ではなく印で続きを判定する
+    const SHUTOKO_REF = /^(C1|C2|B|K\d|S\d|\d{1,2})$/;
+    const otherName = names => names.find(n => TOLL_RE.test(n) && !/首都高/.test(n) && /[\u3040-\u9fff]/.test(n)) || (names.some(n => /^E\d+/.test(n)) ? (roadLabel(names) || names[0]) : null);
+    let run = null;
+    const close = () => { if (run && run.shutoko && run.km > 0) trips.push({ km:run.km }); run = null; };
+    route.maneuvers.forEach((m, i) => {
+      const km = segKm(i), names = m.streets || [];
+      if (!(m.toll || m.hwy)){ if (km > 0.4) close(); return; }
+      const on = otherName(names);
+      if (on){ if (m.toll && !others.includes(on)) others.push(on); return; }      // 首都高以外の有料道路（料金は未対応）
+      if (!run) run = { km:0, shutoko:false };
+      run.km += km;
+      if (isShutoko(names) || names.some(n => SHUTOKO_REF.test(n))) run.shutoko = true;
+    });
+    close();
+    trips.forEach(t => t.yen = shutokoToll(t.km));
+    return { shutoko:trips, total:trips.reduce((s, t) => s + t.yen, 0), others };
+  }
   route.maneuvers.forEach((m, i) => {
     const a = m.begin, b = i + 1 < route.maneuvers.length ? route.maneuvers[i+1].begin : route.coords.length - 1;
     const km = (route.cum[Math.min(b, route.cum.length-1)] - route.cum[Math.min(a, route.cum.length-1)]) / 1000;
@@ -580,6 +628,21 @@ function routeTolls(route){
   });
   trips.forEach(t => t.yen = shutokoToll(t.km));
   return { shutoko:trips, total:trips.reduce((s, t) => s + t.yen, 0), others };
+}
+
+/* ルート上の自動車専用道路（Valhallaの highway 印）の区間を避けるための地点。
+   「高速・有料道路を使わない」のとき、無料の自動車専用道路が残っていたら、これを付けて取り直す */
+function hwyLocs(route){
+  const locs = [];
+  route.maneuvers.forEach((m, i) => {
+    if (!m.hwy) return;
+    const a = m.begin, b = i + 1 < route.maneuvers.length ? route.maneuvers[i+1].begin : route.coords.length - 1;
+    const s0 = route.cum[Math.min(a, route.cum.length-1)], s1 = route.cum[Math.min(b, route.cum.length-1)], len = s1 - s0;
+    if (len < 80) return;
+    const marks = len < 600 ? [s0 + len / 2] : (() => { const out = []; for (let sv = s0 + 250; sv < s1 - 100; sv += 1000) out.push(sv); return out; })();
+    marks.forEach(sv => { const q = pointAt(route, sv).pos; locs.push({ lat:+q.lat.toFixed(6), lon:+q.lon.toFixed(6), search_filter:{ min_road_class:'motorway', exclude_ramp:true } }); });
+  });
+  return locs.slice(0, 40);
 }
 
 /* =========================================================
@@ -620,6 +683,33 @@ function createVoiceMemo(opt){
   }
   function tick(t){ return on && (t - lastAt >= silence || t - since >= maxLen) ? [close('save', true)] : []; }
   return { feed, tick, get on(){ return on; }, get text(){ return buf.join(' '); } };
+}
+
+/* 検索語が「番地までの住所」らしいか（数字があり、区市町村・丁目・番などを含む） */
+function looksAddress(q){
+  const t = String(q || '');
+  return /丁目|番地/.test(t) || (/[0-9０-９]/.test(t) && /[都道府県市区町村郡]|番|号|[0-9０-９]\s*[-－ー‐]\s*[0-9０-９]/.test(t));
+}
+/* 3つの検索結果を1つの並びにまとめる。n：Nominatim、ph：Photon、g：国土地理院、here：地図の中心、addr：住所らしい検索か */
+function mergePlaces(n, ph, g, here, addr){
+  const N = (Array.isArray(n) ? n : []).map(r => ({ lat:+r.lat, lon:+r.lon, name:r.name || String(r.display_name || '').split(',')[0],
+    addr:String(r.display_name || '').split(',').slice(1, 5).join(' ').trim(), src:'n' }));
+  const WEAK = /^(bus_stop|stop|platform|footway|path|steps|bicycle_rental|parking_entrance|crossing)$/;
+  const P = ((ph && ph.features) || []).filter(f => f.properties && f.properties.countrycode === 'JP' && f.properties.name && f.geometry).map(f => {
+    const o = f.properties;
+    return { lat:f.geometry.coordinates[1], lon:f.geometry.coordinates[0], name:o.name, addr:[o.state, o.city, o.district, o.street].filter(Boolean).join(' '), src:'p', weak:WEAK.test(o.osm_value || '') };
+  });
+  const G = (Array.isArray(g) ? g : []).filter(f => f.geometry && f.properties && f.properties.title)
+    .map(f => ({ lat:f.geometry.coordinates[1], lon:f.geometry.coordinates[0], name:f.properties.title, addr:'住所・地名（国土地理院）', src:'g' }))
+    .filter(x => !here || dist(here, x) < 300000).slice(0, addr ? 3 : 5);
+  const order = addr ? [...G, ...N, ...P.filter(x => !x.weak), ...P.filter(x => x.weak)] : [...N, ...P.filter(x => !x.weak), ...P.filter(x => x.weak), ...G];
+  const out = [];
+  for (const x of order){
+    if (!isFinite(x.lat) || !isFinite(x.lon)) continue;
+    if (out.some(y => dist(x, y) < 120 && (x.name === y.name || x.name.includes(y.name) || y.name.includes(x.name)))) continue;
+    out.push(x);
+  }
+  return out.slice(0, 8);
 }
 
 /* 次の案内 */
@@ -850,7 +940,10 @@ async function requestRoute(pts, opts){
     if (!first) await sleep(1100); first = false;
     const body = { locations:buildLocations(pts, t.heading, t.filter), costing:t.costing, directions_options:{ units:'kilometers' } };
     if (t.lang) body.directions_options.language = t.lang;
-    const co = opts.noHwy ? { use_highways:0, use_tolls:0 } : { use_highways:1 };
+    // 道の選び方（2026-11 に都内6区間で実測して決めた値）
+    //  ・use_distance 0.3：所要時間だけで選ぶと、国道を大回りする道になりやすい（例：北千住→錦糸町が10.9km→7.9km、時間も短い）
+    //  ・有料を使わないときは use_tolls:0 だけにする。use_highways:0 は国道（幹線）まで避けてしまい、細い道と右左折が増える
+    const co = (opts.mode === 'notoll' || opts.mode === 'nohwy') ? { use_tolls:0, use_distance:0.3 } : { use_highways:1, use_distance:0.3 };
     body.costing_options = { [t.costing]: co };
     if (opts.exclude && opts.exclude.length) body.exclude_locations = opts.exclude;
     if (opts.originHeadingTol && body.locations[0].heading != null) body.locations[0].heading_tolerance = opts.originHeadingTol;
@@ -867,6 +960,17 @@ async function requestRoute(pts, opts){
     } catch(e){ lastErr = e.message; }
   }
   throw new Error(lastErr || 'ルート検索に失敗しました');
+}
+/* 「高速・有料道路を使わない」：無料の自動車専用道路が残っていたら、その区間を避けて1回だけ取り直す */
+async function requestRouteMode(pts, opts){
+  let r = await requestRoute(pts, opts);
+  if (opts.mode === 'nohwy' && r.routes[0].hasHwy){
+    const ex = hwyLocs(r.routes[0]);
+    if (ex.length){
+      try { await sleep(1100); const r2 = await requestRoute(pts, { ...opts, exclude:[...(opts.exclude || []), ...ex] }); if (!r2.routes[0].hasHwy) r = r2; } catch(e){}
+    }
+  }
+  return r;
 }
 
 /* ===== ここから画面 ===== */
@@ -964,7 +1068,7 @@ if (typeof window !== 'undefined' && window.maplibregl){
     return p.type === 'announce' ? `<b>${p.name}</b><br>${p.msg}`
       : `<b>${p.name}</b><br>制限${p.limit}km/h／進行方向${p.dir}°<br>${p.info}<br>誤差の目安：道なりに±${p.unc}m${p.edited ? '（この端末で修正済み）' : ''}<br><span style="color:#666">根拠：${p.src}</span>`;
   }
-  map.on('click', 'route-alt', e => selectRoute(e.features[0].properties.idx));
+  map.on('click', 'route-alt', e => { pickedByUser = true; selectRoute(e.features[0].properties.idx); });
   map.on('click', 'orbis-pt', e => {
     const p = POINTS.find(x => x.id === e.features[0].properties.id); if (!p) return;
     new maplibregl.Popup({ closeButton:true, maxWidth:'270px' }).setLngLat([p.lon, p.lat]).setHTML(`<div style="color:#111;font-size:13px;line-height:1.6">${pointHtml(p)}</div>`).addTo(map);
@@ -1258,10 +1362,11 @@ if (typeof window !== 'undefined' && window.maplibregl){
   const guideRound = d => d >= 1000 ? Math.round(d / 500) * 500 : Math.max(100, Math.round(d / 100) * 100);
   function maybeReroute(res){
     if (!navOn || rerouting || !P('reroute')) return;
-    if (res.offBy < 50 || (res.acc && res.acc > 40)){ offSince = null; return; }
+    // ルートに吸着できない状態（30m以上のずれ）が続いたら再検索。30〜50mは並走する側道のことが多いので、少し長めに待つ
+    if (res.offBy < 30 || (res.acc && res.acc > 40)){ offSince = null; return; }
     const now = performance.now();
     if (offSince == null){ offSince = now; return; }
-    if (now - offSince < 6000 || now - lastReroute < 20000) return;
+    if (now - offSince < (res.offBy < 50 ? 10000 : 6000) || now - lastReroute < 20000) return;
     reroute();
   }
   const isUturnStart = r => r.maneuvers.some(m => (m.type === 12 || m.type === 13) && r.cum[Math.min(m.begin, r.cum.length-1)] < 600);
@@ -1274,15 +1379,17 @@ if (typeof window !== 'undefined' && window.maplibregl){
     const cur = { lat:last.pos.lat, lon:last.pos.lon, name:'現在地', heading: moving && hdg != null ? hdg : null };
     const ahead = routeWps.slice(1).filter((w, i) => (wpAlong[i+1] == null) || wpAlong[i+1] > lastAlong + 30);
     if (!ahead.length) ahead.push(routeWps[routeWps.length-1]);
-    const opts = { noHwy:$('optNoHwy').checked, exclude:avoidLocs(), keepHeading:true, originHeadingTol:35 };
+    const kind = routes[sel] ? routes[sel].kind : null;
+    const opts = { mode: $('optNoHwy').checked ? 'nohwy' : (kind === 'free' ? 'notoll' : 'any'), exclude:avoidLocs(), keepHeading:true, originHeadingTol:35 };
     const ev = { reason: last.wrongWay ? 'wrongway' : 'offroute', heading: cur.heading != null ? Math.round(cur.heading) : null, from:[+cur.lat.toFixed(6), +cur.lon.toFixed(6)] };
     try {
-      let r = await requestRoute([cur, ...ahead], opts), start = cur, retried = false;
+      let r = await requestRouteMode([cur, ...ahead], opts), start = cur, retried = false;
       // Uターンから始まるルートなら、進行方向の80m先を出発点にして取り直す
       if (cur.heading != null && isUturnStart(r.routes[0])){
         const fwd = { ...cur, ...movePoint(cur, cur.heading, 80) };
         try { const r2 = await requestRoute([fwd, ...ahead], opts); retried = true; if (!isUturnStart(r2.routes[0])){ r = r2; start = fwd; } } catch(_){}
       }
+      r.routes[0].kind = kind;
       routes = [r.routes[0]]; sel = 0; routeWps = [start, ...ahead]; computeWpAlong();
       eng.setRoute(routes[0], POINTS, layersOn); spokenM.clear(); refreshRoutes();
       logEvent('reroute', { ...ev, ok:true, retried, uturn:isUturnStart(routes[0]), first:routes[0].maneuvers.slice(0, 3).map(m => m.text) });
@@ -1304,25 +1411,35 @@ if (typeof window !== 'undefined' && window.maplibregl){
   // =========================================================
   //  検索（上の検索バー）→ 選んだらすぐにルート → 「開始」
   // =========================================================
-  async function nominatim(q){
-    const c = map.getCenter();
-    const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=8&countrycodes=jp&accept-language=ja&q=${encodeURIComponent(q)}&viewbox=${c.lng-0.6},${c.lat+0.45},${c.lng+0.6},${c.lat-0.45}`;
-    const res = await fetch(url, { headers:{ 'Accept':'application/json' } });
-    return res.json();
+  // 検索先は3つ：Nominatim（施設・駅）、Photon（あいまいな店名など）、国土地理院（番地までの住所）。まとめて近い順ではなく「当たりやすい順」に並べる
+  async function getJson(url, ms){
+    const ac = new AbortController(), to = setTimeout(() => ac.abort(), ms || 8000);
+    try { const r = await fetch(url, { signal:ac.signal, headers:{ 'Accept':'application/json' } }); return r.ok ? await r.json() : null; }
+    catch(e){ return null; } finally { clearTimeout(to); }
   }
-  const placeName = r => r.name || r.display_name.split(',')[0];
-  const placeAddr = r => r.display_name.split(',').slice(1, 5).join(' ').trim();
+  async function searchPlaces(q){
+    const c = map.getCenter(), here = { lat:c.lat, lon:c.lng }, e = encodeURIComponent(q), addr = looksAddress(q);
+    const gsi = () => getJson(`https://msearch.gsi.go.jp/address-search/AddressSearch?q=${e}`);
+    const [n, ph, g] = await Promise.all([
+      getJson(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=8&countrycodes=jp&accept-language=ja&q=${e}&viewbox=${c.lng-0.6},${c.lat+0.45},${c.lng+0.6},${c.lat-0.45}`),
+      getJson(`https://photon.komoot.io/api/?q=${e}&lat=${c.lat.toFixed(4)}&lon=${c.lng.toFixed(4)}&limit=8&lang=default`),
+      addr ? gsi() : null ]);
+    if (n == null && ph == null && g == null) throw new Error('検索サーバーに接続できませんでした');
+    let out = mergePlaces(n, ph, g, here, addr);
+    if (!out.length && !addr) out = mergePlaces(null, null, await gsi(), here, true);   // 施設で見つからなければ、地名として探す
+    return out;
+  }
   async function topSearch(){
     const q = $('q2').value.trim(); if (!q) return;
     const panel = $('searchPanel'); panel.hidden = false; panel.innerHTML = '<div class="empty">検索中…</div>';
     try {
-      const js = await nominatim(q);
-      if (!js.length){ panel.innerHTML = '<div class="empty">見つかりませんでした。施設名・駅名・住所などで試してください。</div>'; return; }
+      const js = await searchPlaces(q);
+      if (!js.length){ panel.innerHTML = '<div class="empty">見つかりませんでした。施設名・駅名・住所（例：墨田区石原1-1）などで試してください。</div>'; return; }
       panel.innerHTML = js.map((r, i) => {
-        const km = last && last.pos && isFinite(last.pos.lat) ? fmtDist(dist(last.pos, { lat:+r.lat, lon:+r.lon })) : '';
-        return `<button class="res" data-i="${i}"><span class="ic">📍</span><span class="tx"><b>${escapeHtml(placeName(r))}</b><small>${escapeHtml(placeAddr(r))}</small></span><span class="km">${km}</span></button>`;
+        const km = last && last.pos && isFinite(last.pos.lat) ? fmtDist(dist(last.pos, r)) : '';
+        return `<button class="res" data-i="${i}"><span class="ic">${r.src === 'g' ? '🏠' : '📍'}</span><span class="tx"><b>${escapeHtml(r.name)}</b><small>${escapeHtml(r.addr)}</small></span><span class="km">${km}</span></button>`;
       }).join('');
-      panel.onclick = e => { const b = e.target.closest('[data-i]'); if (!b) return; const r = js[+b.dataset.i]; goTo({ lat:+r.lat, lon:+r.lon, name:placeName(r) }); };
+      panel.onclick = e => { const b = e.target.closest('[data-i]'); if (!b) return; const r = js[+b.dataset.i]; goTo({ lat:r.lat, lon:r.lon, name:r.name }); };
     } catch(e){ panel.innerHTML = `<div class="empty">検索に失敗しました：${escapeHtml(e.message)}</div>`; }
   }
   $('q2').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); $('q2').blur(); topSearch(); } });
@@ -1385,13 +1502,13 @@ if (typeof window !== 'undefined' && window.maplibregl){
     const q = $('q').value.trim(); if (!q) return;
     $('searchRes').innerHTML = '<div class="note">検索中…</div>';
     try {
-      const js = await nominatim(q);
+      const js = await searchPlaces(q);
       if (!js.length){ $('searchRes').innerHTML = '<div class="note">見つかりませんでした。</div>'; return; }
-      $('searchRes').innerHTML = js.map((r, i) => `<div class="sres"><b>${escapeHtml(placeName(r))}</b><small>${escapeHtml(placeAddr(r))}</small>
+      $('searchRes').innerHTML = js.map((r, i) => `<div class="sres"><b>${escapeHtml(r.name)}</b><small>${escapeHtml(r.addr)}</small>
         <div class="acts"><button data-r="${i}" data-as="dest">目的地</button><button data-r="${i}" data-as="via">経由地</button><button data-r="${i}" data-as="start">出発地</button></div></div>`).join('');
       $('searchRes').onclick = e => {
         const d = e.target.dataset; if (d.r == null) return; const r = js[+d.r];
-        addPoint({ lat:+r.lat, lon:+r.lon, name:placeName(r) }, d.as);
+        addPoint({ lat:r.lat, lon:r.lon, name:r.name }, d.as);
         $('searchRes').innerHTML = ''; $('q').value = '';
       };
     } catch(e){ $('searchRes').innerHTML = '<div class="note">検索に失敗しました：' + escapeHtml(e.message) + '</div>'; }
@@ -1438,22 +1555,63 @@ if (typeof window !== 'undefined' && window.maplibregl){
     const list = pts.map(p => ({ ...p }));
     if ($('optLoop').checked) list.push({ ...pts[0] });
     $('routeErr').innerHTML = '<div class="note">ルート検索中…</div>';
+    const seq = ++routeSeq, noHwy = $('optNoHwy').checked;
     try {
-      const r = await requestRoute(list, { noHwy:$('optNoHwy').checked, exclude:avoidLocs() });
-      routes = r.routes; sel = 0; routeWps = list; computeWpAlong();
+      const mk = () => ({ mode: noHwy ? 'nohwy' : 'any', exclude:avoidLocs() });
+      let r = await requestRouteMode(list, mk());
+      // 避けている路線に別の入口から乗るルートが返ることがある。その区間にも避ける地点を足して、2回まで取り直す
+      for (let k = 0; k < 2 && avoidRoads.length && seq === routeSeq; k++){
+        let added = 0;
+        for (const a of avoidRoads){
+          const more = makeAvoid(r.routes[0], a.name).filter(l => !a.locs.some(x => dist(x, l) < 150));
+          if (more.length){ a.locs = [...a.locs, ...more].slice(0, 30); added += more.length; }
+        }
+        if (!added) break;
+        store.set('avoidRoads', avoidRoads); await sleep(1100);
+        try { r = await requestRouteMode(list, mk()); } catch(e){ break; }
+      }
+      if (seq !== routeSeq) return;
+      const anyToll = !noHwy && r.routes.some(x => x.hasToll);
+      routes = r.routes.slice(0, anyToll ? 2 : 3);              // 有料を使う候補があるときは、3本目を「下道」に空けておく
+      routes.forEach(x => x.kind = x.hasToll ? 'toll' : 'free');
+      sel = 0; routeWps = list; computeWpAlong(); pickedByUser = false; freeLoading = false;
       eng.setRoute(routes[sel], POINTS, layersOn);
       $('routeErr').innerHTML = ''; routeMeta = r;
       closeSheets(); refreshRoutes(); setState('preview'); renderPreview(); fitRoute();
       $('toast').classList.remove('show');
+      if (anyToll && !routes.some(x => x.kind === 'free') && !list.some(q => q.hwy) && !$('optLoop').checked) addFreeRoute(list, seq);
     } catch(e){
+      if (seq !== routeSeq) return;
       $('routeErr').innerHTML = '<div class="note" style="color:var(--danger)">ルート検索に失敗しました：' + escapeHtml(e.message) +
         '<br>地点が道路から離れている、または向き指定が合っていない可能性があります。ピンを道路上に動かして再検索してください。</div>';
       $('toast').classList.remove('show'); openSheet('routeSheet');
     }
   }
-  let routeMeta = null;
+  let routeMeta = null, routeSeq = 0, freeLoading = false, pickedByUser = false;
+  // 有料道路を使う候補しか無いとき、下道（有料なし）のルートも追加で探して並べる
+  async function addFreeRoute(list, seq){
+    freeLoading = true; renderPreview();
+    try {
+      await sleep(1100);
+      const f = await requestRoute(list, { mode:'notoll', exclude:avoidLocs() });
+      if (seq !== routeSeq || state !== 'preview') return;
+      const fr = f.routes[0];
+      if (!fr.hasToll && !routes.some(x => Math.abs(x.length - fr.length) < 80 && Math.abs(x.time - fr.time) < 30)){
+        fr.kind = 'free'; routes = [...routes.slice(0, 2), fr]; refreshRoutes();
+        if (!pickedByUser && store.get('routeKind', 'toll') === 'free'){ selectRoute(routes.length - 1); fitRoute(); }   // 前回、下道で走った人には下道を先に選んでおく
+      }
+    } catch(e){}
+    finally { if (seq === routeSeq){ freeLoading = false; if (state === 'preview') renderPreview(); } }
+  }
+  function kindLabel(r, mixed){
+    if (!mixed) return '';
+    if (r.kind === 'free') return r.hasHwy ? '・無料' : '・下道';
+    const yen = routeTolls(r).total; return yen ? `・${yen.toLocaleString()}円` : '・有料';
+  }
   function renderPreview(){
-    $('pvChips').innerHTML = routes.map((r, i) => `<button class="chip ${i === sel ? 'sel' : ''}" data-sel="${i}"><b>${fmtTime(r.time)}</b><small>${fmtDist(r.length)}${i === 0 ? '・おすすめ' : ''}</small></button>`).join('');
+    const mixed = routes.some(r => r.kind === 'toll');
+    $('pvChips').innerHTML = routes.map((r, i) => `<button class="chip ${i === sel ? 'sel' : ''}" data-sel="${i}"><b>${fmtTime(r.time)}</b><small>${fmtDist(r.length)}${mixed ? kindLabel(r, true) : (i === 0 ? '・おすすめ' : '')}</small></button>`).join('')
+      + (freeLoading ? '<span class="chip" id="pvFreeWait" style="opacity:.6"><b>下道</b><small>検索中…</small></span>' : '');
     const r = routes[sel];
     const n = pointsOnRoute(r, POINTS, layersOn).filter(o => o.point.type === 'orbis').length;
     const via = r.roads.slice(0, 4).join(' → ') || '一般道';
@@ -1467,7 +1625,7 @@ if (typeof window !== 'undefined' && window.maplibregl){
     $('pvInfo').innerHTML = `${escapeHtml(via)}<br>到着予定 ${clock(r.time)}／ルート上のオービス ${n}か所${$('pvInfo').dataset.spd || ''}${routeMeta && routeMeta.costing !== 'motorcycle' ? '／車用ルート' : ''}${$('optLoop').checked ? '／周回' : ''}${tollTxt}`;
     requestAnimationFrame(layoutFabs);
   }
-  $('pvChips').addEventListener('click', e => { const b = e.target.closest('[data-sel]'); if (b) selectRoute(+b.dataset.sel); });
+  $('pvChips').addEventListener('click', e => { const b = e.target.closest('[data-sel]'); if (b){ pickedByUser = true; selectRoute(+b.dataset.sel); } });
   function selectRoute(i){ sel = i; computeWpAlong(); eng.setRoute(routes[sel], POINTS, layersOn); refreshRoutes(); if (state === 'preview') renderPreview(); }
   function fitRoute(){
     const r = routes[sel]; if (!r) return;
@@ -1483,15 +1641,16 @@ if (typeof window !== 'undefined' && window.maplibregl){
   // ---- 案内の開始・終了 ----
   async function startNav(){
     unlockAudio(); requestCompass(); ensureGps();
-    navOn = true; spokenM.clear(); offSince = null; lastAlong = 0; cam.navZoom = null;
+    navOn = true; spokenM.clear(); offSince = null; lastAlong = 0; cam.navZoom = null; routeSeq++;
+    rideStart();
+    if (voiceMode() !== 'off') voiceStart();                // iPhoneはタップの直後でないとマイクを開始できないので、待ちが入る前に始める
+    if (routes[sel] && routes[sel].kind && routes.some(r => r.kind === 'toll')) store.set('routeKind', routes[sel].kind);   // 有料／下道のどちらを選んだか覚えておく
     eng.reset(); if (routes[sel]) eng.setRoute(routes[sel], POINTS, layersOn);
     setState('nav'); setFollow(true);
     $('turnArrow').textContent = routes[sel] ? '↑' : '⚠'; $('turnDist').textContent = routes[sel] ? '' : 'ルートなし';
     $('turnText').textContent = routes[sel] ? 'ルートに沿って進んでください' : 'オービス警告のみで走行中';
     speak(routes[sel] ? '案内を開始します。' : 'オービス警告を開始します。', 'sys');
     await requestWake(); startDrTimer();
-    rideStart();
-    if (voiceMode() !== 'off') voiceStart();
     if (!last || !last.pos) toast('現在地を取得中…');
     else handle(last, false);
   }
@@ -1715,7 +1874,7 @@ if (typeof window !== 'undefined' && window.maplibregl){
   // =========================================================
   const HWY_RE = /首都高|高速|自動車道|有料|第三京浜|第二京浜道路|京葉道路|横浜新道|保土ヶ谷バイパス|アクアライン/;
   let avoidRoads = store.get('avoidRoads', []);       // [{ name, locs:[{lat,lon,search_filter}] }]
-  const avoidLocs = () => avoidRoads.flatMap(a => a.locs);
+  const avoidLocs = () => avoidRoads.flatMap(a => a.locs).slice(0, 50);
   function roadSegments(r, name){
     const segs = [];
     r.maneuvers.forEach((m, i) => {
@@ -1885,7 +2044,7 @@ if (typeof window !== 'undefined' && window.maplibregl){
   }
   function voiceStart(){
     if (!SR){ toast('このブラウザは音声認識に対応していないため、声の操作は使えません', 4000); return; }
-    voice.want = true; voice.fails = 0; voice.needTap = false; voice.paused = !$('memoBox').hidden; micOpen();
+    voice.want = true; voice.fails = 0; voice.quick = 0; voice.needTap = false; voice.paused = !$('memoBox').hidden; micOpen();
     logEvent('voice', { ev:'listen', ios:IOS });
     if (!voice.r) voiceLoop();
     voiceStatus();
@@ -1909,9 +2068,10 @@ if (typeof window !== 'undefined' && window.maplibregl){
     let r; try { r = new SR(); } catch(e){ voiceStop(); toast('音声認識を開始できませんでした', 4000); return; }
     r.lang = 'ja-JP'; r.interimResults = true; r.continuous = !IOS; r.maxAlternatives = 1;
     voice.interim = '';
+    const t0 = Date.now(); let heard = false;
     r.onstart = () => { voice.lastAct = Date.now(); };
     r.onresult = e => {
-      voice.lastAct = Date.now(); voice.fails = 0;
+      voice.lastAct = Date.now(); voice.fails = 0; heard = true; voice.quick = 0;
       if (!voice.everOk){ voice.everOk = true; logEvent('voice', { ev:'heard' }); }
       let interim = '';
       for (let i = e.resultIndex; i < e.results.length; i++){
@@ -1932,6 +2092,11 @@ if (typeof window !== 'undefined' && window.maplibregl){
       if (voice.r !== r) return;
       voice.r = null;
       if (!voice.want) return;
+      // 1.5秒もたたずに何も聞かずに終わる＝iPhone側が聞き取りを始められていない。続くなら間隔をあけ、12回で止める
+      voice.quick = (!heard && Date.now() - t0 < 1500) ? (voice.quick || 0) + 1 : 0;
+      if (voice.quick === 3) logEvent('voice', { ev:'quick-end', n:3 });
+      if (voice.quick >= 12){ logEvent('voice', { ev:'gave-up' }); voiceStop(); toast('音声認識を始められないため、声の操作を止めました（設定の「マイクと音声認識のテスト」で確認できます）', 7000); return; }
+      if (voice.quick >= 3) voice.fails = Math.max(voice.fails, voice.quick - 1);
       voice.timer = setTimeout(voiceLoop, voice.fails ? Math.min(10000, 500 * 2 ** voice.fails) : 200);
       voiceStatus();
     };
@@ -1965,15 +2130,25 @@ if (typeof window !== 'undefined' && window.maplibregl){
   window.__orbisNavi.voice = voice;
 
   // ---- マイクと音声認識のテスト（どこで止まっているかを切り分けて、送信先にも残す）----
-  $('btnMicTest').onclick = async () => {
-    const out = $('micTestOut'), btn = $('btnMicTest');
-    const d = { kind:'diag', id:new Date().toISOString().replace(/[:.]/g, '-'), t:Date.now(), version:APP_VERSION, ua:navigator.userAgent,
-      sr:!!SR, audioSessionBefore: navigator.audioSession ? navigator.audioSession.type : null, gum:null, level:null, device:null, srEvents:[], srText:'', srError:null };
-    btn.disabled = true;
-    const voiceWas = voice.want; if (voiceWas) voicePause(true);
-    micOpen();
-    // 1) マイクの音量（3秒）
-    out.textContent = '① 3秒間、何か話してください（マイクの音量を測ります）…';
+  // 順番が大事：先に音声認識（タップの直後に開始）、終わってからマイクの音量。
+  // iPhoneでは、マイクを別の方法（getUserMedia）で使っていると音声認識に音が届かないため、同時には使わない
+  let lastDiag = null;
+  function srTest(d, out){
+    return new Promise(resolve => {
+      let done = false, r; const t0 = Date.now(), mark = ev => d.srEvents.push(`${ev}@${((Date.now() - t0) / 1000).toFixed(1)}`);
+      const fin = () => { if (!done){ done = true; resolve(); } };
+      try { r = new SR(); } catch(e){ d.srError = 'create: ' + e.message; fin(); return; }
+      r.lang = 'ja-JP'; r.interimResults = true; r.continuous = false;
+      ['start', 'audiostart', 'soundstart', 'speechstart', 'speechend', 'soundend', 'audioend', 'nomatch'].forEach(ev => r['on' + ev] = () => mark(ev));
+      r.onresult = e => { let t = ''; for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript; d.srText = t; if (!d.srEvents.some(x => x.startsWith('result'))) mark('result'); out.textContent = `① 聞き取り中：「${t}」`; };
+      r.onerror = e => { if (!d.srTimeout) d.srError = e.error; mark('error:' + e.error); };
+      r.onend = () => { mark('end'); fin(); };
+      window.__srTest = r;                                // 途中で片付けられないように握っておく
+      try { r.start(); } catch(e){ d.srError = 'start: ' + e.message; fin(); return; }
+      setTimeout(() => { if (!done){ d.srTimeout = true; mark('timeout'); try { r.abort(); } catch(e){} setTimeout(fin, 600); } }, 9000);
+    });
+  }
+  async function levelTest(d, out){
     try {
       const st = await navigator.mediaDevices.getUserMedia({ audio:true });
       const tr = st.getAudioTracks()[0]; d.device = tr ? tr.label : null;
@@ -1981,38 +2156,54 @@ if (typeof window !== 'undefined' && window.maplibregl){
       const an = ac.createAnalyser(); an.fftSize = 1024; ac.createMediaStreamSource(st).connect(an);
       const buf = new Float32Array(an.fftSize); let max = 0;
       for (let i = 0; i < 30; i++){
-        await new Promise(r => setTimeout(r, 100)); an.getFloatTimeDomainData(buf);
+        await sleep(100); an.getFloatTimeDomainData(buf);
         let sum = 0; for (const v of buf) sum += v * v; max = Math.max(max, Math.sqrt(sum / buf.length));
-        out.textContent = `① 3秒間、何か話してください… 音量 ${'■'.repeat(Math.min(10, Math.round(max * 60)))}`;
+        out.textContent = `② 3秒間、何か話してください… 音量 ${'■'.repeat(Math.min(10, Math.round(max * 60)))}`;
       }
-      d.gum = 'ok'; d.level = +max.toFixed(4); d.trackEnded = tr ? tr.readyState === 'ended' : null;
-      st.getTracks().forEach(t => t.stop()); ac.close().catch(() => {});
+      d.gum = 'ok'; d.level = +max.toFixed(4);
+      st.getTracks().forEach(t => t.stop()); await ac.close().catch(() => {});
     } catch(e){ d.gum = `${e.name}: ${e.message}`; }
-    // 2) 音声認識（最長8秒）
-    if (SR){
-      out.textContent = '② 「テスト」と話してください（音声認識を試します）…';
-      micOpen();
-      await new Promise(resolve => {
-        let done = false; const fin = () => { if (!done){ done = true; resolve(); } };
-        let r; try { r = new SR(); } catch(e){ d.srError = 'create: ' + e.message; fin(); return; }
-        r.lang = 'ja-JP'; r.interimResults = true; r.continuous = false;
-        ['start', 'audiostart', 'soundstart', 'speechstart', 'speechend', 'soundend', 'audioend', 'nomatch'].forEach(ev => r['on' + ev] = () => d.srEvents.push(ev));
-        r.onresult = e => { let t = ''; for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript; d.srText = t; d.srEvents.push('result'); out.textContent = `② 聞き取り中：「${t}」`; };
-        r.onerror = e => { d.srError = e.error; d.srEvents.push('error:' + e.error); };
-        r.onend = () => { d.srEvents.push('end'); fin(); };
-        try { r.start(); } catch(e){ d.srError = 'start: ' + e.message; fin(); return; }
-        setTimeout(() => { if (!done){ d.srEvents.push('timeout'); try { r.abort(); } catch(e){} setTimeout(fin, 500); } }, 8000);
-      });
-    }
-    d.audioSessionAfter = navigator.audioSession ? navigator.audioSession.type : null;
+  }
+  $('btnMicTest').onclick = async () => {
+    const out = $('micTestOut'), btn = $('btnMicTest');
+    const d = { kind:'diag', id:new Date().toISOString().replace(/[:.]/g, '-'), t:Date.now(), version:APP_VERSION, ua:navigator.userAgent,
+      sr:!!SR, ios:IOS, audioSession: navigator.audioSession ? navigator.audioSession.type : null, voiceWas:voice.want, sound:soundMode(),
+      gum:null, level:null, device:null, srEvents:[], srText:'', srError:null, srTimeout:false };
+    btn.disabled = true; $('btnMicCopy').hidden = true;
+    const voiceWas = voice.want; if (voiceWas) voicePause(true);
+    try { speechSynthesis.cancel(); } catch(e){}
+    micOpen(); d.audioSessionOpen = navigator.audioSession ? navigator.audioSession.type : null;
+    // 1) 音声認識（タップの直後に開始。最長9秒）
+    if (SR && !voiceWas){ out.textContent = '① 「テスト、テスト」と話してください（音声認識を試します）…'; await srTest(d, out); }
+    else if (SR){ out.textContent = '① 準備中…'; await sleep(700); out.textContent = '① 「テスト、テスト」と話してください（音声認識を試します）…'; await srTest(d, out); }
+    await sleep(700);
+    // 2) マイクの音量（3秒）
+    out.textContent = '② 3秒間、何か話してください（マイクの音量を測ります）…';
+    await levelTest(d, out);
     micClose(); if (voiceWas) voicePause(false);
     // 結果
     const mic = d.gum !== 'ok' ? `使えません（${d.gum}）` : d.level > 0.01 ? `反応あり（音量 ${d.level}）` : `反応なし（音量 ${d.level}。音が入っていません）`;
-    const srs = !SR ? 'このブラウザにはありません' : d.srText ? `聞き取れました：「${d.srText}」` : d.srError ? `エラー（${d.srError}）` : d.srEvents.includes('timeout') ? '返事がありません（止まったまま）' : '何も聞き取れませんでした';
-    out.innerHTML = `マイク：${mic}<br>音声認識：${srs}<br><small>入力：${d.device || '不明'}／経過：${d.srEvents.join('→') || 'なし'}</small>`;
+    const heardSound = d.srEvents.some(x => /^(soundstart|speechstart)/.test(x));
+    const srs = !SR ? 'このブラウザにはありません'
+      : d.srText ? `聞き取れました：「${d.srText}」`
+      : d.srError && d.srError !== 'no-speech' ? `エラー（${d.srError}）`
+      : d.srTimeout ? (heardSound ? '音は届いたが、文字にできませんでした' : '9秒待っても、音が届きませんでした')
+      : '何も聞き取れませんでした（無音と判定）';
+    const cfg = fbCfg.repo && fbCfg.token;
+    d.fbConfigured = !!cfg; d.pending = pendingCount();
+    lastDiag = d;
+    out.innerHTML = `音声認識：${escapeHtml(srs)}<br>マイク：${escapeHtml(mic)}<br><small>入力：${escapeHtml(d.device || '不明')}<br>経過：${escapeHtml(d.srEvents.join(' → ') || 'なし')}<br>送信先：${cfg ? '設定済み' : 'このブラウザには未設定'}</small>`;
     saveLocal('diags', d, 10);
-    if (fbCfg.repo && fbCfg.token){ try { await ghPut(`diag/${d.id.slice(0, 10)}/${d.id}.json`, d); out.innerHTML += '<br>結果を送信しました'; } catch(e){ out.innerHTML += '<br>結果を送信できませんでした：' + e.message; } }
+    $('btnMicCopy').hidden = false;
+    if (cfg){ try { await ghPut(`diag/${d.id.slice(0, 10)}/${d.id}.json`, d); out.innerHTML += '<br>結果を送信しました'; } catch(e){ out.innerHTML += '<br>結果を送信できませんでした：' + escapeHtml(e.message); } }
+    else out.innerHTML += '<br>結果は送信していません。「結果をコピー」でチャットに貼ってください';
     btn.disabled = false;
+  };
+  $('btnMicCopy').onclick = async () => {
+    if (!lastDiag) return;
+    const d = lastDiag, txt = `【マイクと音声認識のテスト】\n版：${d.version}\n音声認識：${d.srText ? '聞き取れた「' + d.srText + '」' : (d.srError || (d.srTimeout ? 'timeout' : 'なし'))}\n経過：${d.srEvents.join(' → ') || 'なし'}\nマイク：${d.gum}／音量 ${d.level}／入力 ${d.device || '不明'}\n音の設定：${d.sound}／声で操作：${d.voiceWas ? '使用中' : 'なし'}／audioSession：${d.audioSession}→${d.audioSessionOpen}\n送信先：${d.fbConfigured ? '設定済み' : '未設定'}／未送信 ${d.pending}件\n${d.ua}`;
+    try { await navigator.clipboard.writeText(txt); toast('結果をコピーしました。チャットに貼り付けてください', 3500); }
+    catch(e){ $('micTestOut').innerHTML += `<br><textarea readonly style="width:100%;height:120px;font-size:12px">${escapeHtml(txt)}</textarea>`; toast('表示された内容を長押ししてコピーしてください', 3500); }
   };
 
   // ---- 送信（GitHubの非公開リポジトリへ。トークンはこの端末だけ） ----
@@ -2057,7 +2248,7 @@ if (typeof window !== 'undefined' && window.maplibregl){
     if (err) store.set('fbLastErr', { t:Date.now(), msg:err.message });
     else if (!left) store.set('fbLastErr', null);
     const le = store.get('fbLastErr', null);
-    $('fbStatus').textContent = !fbCfg.repo || !fbCfg.token ? (left ? `端末に未送信が${left}件あります（送信先が未設定）` : '')
+    $('fbStatus').textContent = !fbCfg.repo || !fbCfg.token ? (left ? `このブラウザに未送信が${left}件あります（このブラウザには送信先が未設定です）` : 'このブラウザには送信先が未設定です')
       : left ? `未送信 ${left}件` + (le ? `（${new Date(le.t).toLocaleString('ja-JP')}：${le.msg}）。電波が戻ると自動で送ります` : '')
       : (n ? `${n}件を送信しました。未送信はありません` : '未送信はありません');
   }
@@ -2078,8 +2269,46 @@ if (typeof window !== 'undefined' && window.maplibregl){
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `orbis-navi-feedback-${Date.now()}.json`; document.body.appendChild(a); a.click(); a.remove();
     toast('書き出しました（ファイルをチャットに添付してください）', 4000);
   };
+  // 送信設定の受け渡し：リンクの #fb=… から読み込む（# 以降はサーバーに送られない）
+  const b64u = { enc: t => b64(t).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''),
+    dec: t => new TextDecoder().decode(Uint8Array.from(atob(t.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0))) };
+  async function copyText(txt, okMsg){
+    try { await navigator.clipboard.writeText(txt); toast(okMsg, 3500); }
+    catch(e){ const box = $('exportBox'); box.hidden = false; box.value = txt; box.select(); toast('下に表示した内容を長押ししてコピーしてください', 4000); }
+  }
+  (function importCfg(){
+    const m = /[#&]fb=([A-Za-z0-9_-]+)/.exec(location.hash || ''); if (!m) return;
+    try {
+      const c = JSON.parse(b64u.dec(m[1]));
+      if (c && c.r && c.t){ fbCfg.repo = String(c.r); fbCfg.token = String(c.t); store.set('fbCfg', fbCfg); $('fbRepo').value = fbCfg.repo; $('fbToken').value = fbCfg.token;
+        setTimeout(() => toast('送信先の設定を読み込みました。未送信のメモと記録を送ります', 5000), 1500); }
+    } catch(e){ setTimeout(() => toast('送信設定のリンクを読み込めませんでした', 4000), 1500); }
+    try { history.replaceState(null, '', location.pathname + location.search); } catch(e){}
+  })();
+  $('btnFbLink').onclick = () => {
+    fbCfg.repo = $('fbRepo').value.trim(); fbCfg.token = $('fbToken').value.trim(); store.set('fbCfg', fbCfg);
+    if (!fbCfg.repo || !fbCfg.token){ toast('先に、送信先とアクセストークンを入力してください', 3500); return; }
+    copyText(`${location.origin}${location.pathname}#fb=${b64u.enc(JSON.stringify({ r:fbCfg.repo, t:fbCfg.token }))}`, 'リンクをコピーしました。使う端末のブラウザで開いてください（自分以外には送らない）');
+  };
+  $('btnSiriUrl').onclick = () => {
+    const repo = $('fbRepo').value.trim() || fbCfg.repo;
+    if (!repo){ toast('先に、送信先（ユーザー名/リポジトリ名）を入力してください', 3500); return; }
+    copyText(`https://api.github.com/repos/${repo}/contents/memos/siri/.txt`, 'URLをコピーしました（.txt の前に日付を入れてください）');
+  };
+  $('btnSiriAuth').onclick = () => {
+    const tk = $('fbToken').value.trim() || fbCfg.token;
+    if (!tk){ toast('先に、アクセストークンを入力してください', 3500); return; }
+    copyText(`Bearer ${tk}`, 'Authorizationの値をコピーしました');
+  };
   fbShow(null, 0);
-  setTimeout(uploadPending, 4000);
+  setTimeout(async () => {
+    await uploadPending();
+    const left = pendingCount();
+    if (left && (!fbCfg.repo || !fbCfg.token) && !store.get('fbNagAt', 0) || (left && (!fbCfg.repo || !fbCfg.token) && Date.now() - store.get('fbNagAt', 0) > 86400000)){
+      store.set('fbNagAt', Date.now());
+      toast(`メモ・走行記録が${left}件、このブラウザに残っています。送信先が未設定です（設定 → 走行記録とメモの送信）`, 7000);
+    }
+  }, 4000);
   window.__orbisNavi.getRide = () => ride; window.__orbisNavi.getAvoid = () => avoidRoads;
 
   renderPts(); setState('idle');
@@ -2088,7 +2317,7 @@ if (typeof window !== 'undefined' && window.maplibregl){
 /* Nodeでのテスト用 */
 if (typeof module !== 'undefined') module.exports = { evaluate, dist, bearing, angDiff, decodePolyline6, buildRoute, locateOnRoute, nextManeuver, pointAt,
   pointsOnRoute, createEngine, inYamateTunnel, routeHeadingAt, streetsAt, distToLine, APPROACH, POINTS, LAYERS, PRESETS, cleanText, roadLabel,
-  shutokoToll, routeTolls, createVoiceMemo };
+  shutokoToll, routeTolls, createVoiceMemo, hwyLocs, looksAddress, mergePlaces };
 </script>
 </body>
 </html>

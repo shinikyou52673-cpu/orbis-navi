@@ -24,6 +24,8 @@ GitHub Pages で公開している、iPhone（Chrome / Safari）向けのバイ�
 - 置き場所は、非公開リポジトリ `shinikyou52673-cpu/orbis-navi-feedback` です（アクセスできない日は、この作業を飛ばします）
   - `memos/日付/*.json`：走行中・停車中に残した改善メモ（文字起こし、位置、ルート概要、直前の読み上げ）
   - `rides/日付/*.json`：案内1回分の走行記録（約2秒ごとの位置・判定、イベント：start / speak / reroute / wrongway / memo / arrive / end）
+  - `memos/siri/日付_時刻.txt`：Siriのショートカット「ナビメモ」で話したメモ（本文だけのテキスト。ファイル名が日本時間の日時）。位置は、同じ時刻の走行記録から読み取ります
+  - `diag/日付/*.json`：設定の「マイクと音声認識のテスト」の結果（音声認識の経過、マイクの音量、送信先の設定の有無）
   - `processed.json`：処理済みファイルの一覧。処理したら追記して、そのリポジトリに push します
 - 読み方の目安
   - `reroute` で `uturn:true` → 再検索の指示がUターンだった
@@ -34,6 +36,14 @@ GitHub Pages で公開している、iPhone（Chrome / Safari）向けのバイ�
   - 公開リポジトリに、座標・時刻・走行記録そのものを書き写してはいけません
   - 記録してよいのは、`docs/UX_LOG.md` への「何が起きて、どう直したか」の要約だけです（地名は区レベルまで）
   - テストで再現が必要な場合は、公開の道路線（Valhallaの道筋）から作ります
+
+### ルートの選び方（2026-11-13 に実測して決めた設定。変えるときは同じ測り方で比べること）
+- `requestRoute` の `costing_options` は、次の2通りです
+  - 有料も使う：`{ use_highways:1, use_distance:0.3 }`
+  - 有料を使わない：`{ use_tolls:0, use_distance:0.3 }`
+- `use_distance:0.3` を外すと、国道を大回りする道になります（例：北千住→錦糸町が7.9km・20分 → 10.9km・23分）
+- `use_highways:0` は使いません。国道（幹線）まで避けて、細い道と右左折が増えます（例：蒲田→浅草が40分 → 61分）
+- 比べ方：都内の6〜7区間で、所要時間・距離・右左折の回数・細い道の割合（`trace_attributes` の `edge.road_class`）を表にします
 
 ### 触ってよいもの
 - `index.html` のデータ部分：`LAYERS`／`POINTS`／`APPROACH`／`YAMATE_TUNNEL`／`PRESETS`

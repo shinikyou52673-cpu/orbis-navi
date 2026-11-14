@@ -49,28 +49,53 @@ async def main():
         await pg.click('#btnLocate'); await pg.wait_for_timeout(1000)
         ok((await st())['follow'], '現在地ボタンで追従に戻る')
 
-        print('2. 検索 → ルート → 回避')
-        await ctx.set_geolocation({'latitude':35.7580, 'longitude':139.8160, 'accuracy':8}); await pg.wait_for_timeout(1500)
-        await pg.fill('#q2', '江北橋'); await pg.press('#q2', 'Enter'); await pg.wait_for_timeout(3500)
-        ok(await pg.locator('#searchPanel .res').count() > 0, '検索結果が出る')
-        await pg.locator('#searchPanel .res').first.click()
-        for i in range(30):
+        async def search(q):
+            await pg.fill('#q2', q); await pg.press('#q2', 'Enter')
+            for i in range(20):
+                await pg.wait_for_timeout(600)
+                if await pg.locator('#searchPanel .res').count() or '見つかりません' in await pg.inner_text('#searchPanel') or '失敗' in await pg.inner_text('#searchPanel'): break
+        async def wait_preview():
+            for i in range(40):
+                await pg.wait_for_timeout(800)
+                if (await st())['state'] == 'preview': break
+
+        print('2a. 住所の検索、有料と下道の候補、路線の回避（上野→羽田空港）')
+        await ctx.set_geolocation({'latitude':35.7138, 'longitude':139.7773, 'accuracy':8}); await pg.wait_for_timeout(1500)
+        await search('墨田区石原1-1')
+        ok(await pg.locator('#searchPanel .res').count() > 0 and '石原' in await pg.locator('#searchPanel .res').first.inner_text(), '番地までの住所で検索できる')
+        await search('羽田空港第1ターミナル')
+        ok(await pg.locator('#searchPanel .res').count() > 0, '施設名で検索できる')
+        await pg.locator('#searchPanel .res').first.click(); await wait_preview()
+        ok((await st())['state'] == 'preview', '長い区間のルート確認画面が出る')
+        chips = ''
+        for i in range(25):
+            chips = await pg.inner_text('#pvChips')
+            if ('下道' in chips or '無料' in chips) and '検索中' not in chips: break
             await pg.wait_for_timeout(800)
-            if (await st())['state'] == 'preview': break
-        ok((await st())['state'] == 'preview' and await pg.is_visible('#btnStart'), 'ルート確認画面と「開始」ボタンが出る')
-        ok('首都高 約' in await pg.inner_text('#pvInfo') or '首都高' not in await pg.inner_text('#pvInfo'), '首都高を使うルートでは料金の概算が出る')
+        ok('円' in chips and ('下道' in chips or '無料' in chips) and '検索中' not in chips, '有料道路を使うルートと、下道のルートの両方が候補に出る：' + chips.replace('\n', ' ')[:70])
+        ok('首都高 約' in await pg.inner_text('#pvInfo'), '首都高を使うルートでは料金の概算が出る')
+        kinds = await pg.evaluate("() => __orbisNavi.getRoutes().map(r => [r.kind, r.hasToll, Math.round(r.time/60), Math.round(r.length/100)/10])")
+        ok(any(k[0] == 'free' and not k[1] for k in kinds), f'下道の候補は有料道路を通らない：{kinds}')
         chip = pg.locator('#pvAvoid [data-avoid]')
+        ok(await chip.count() > 0, '高速道路を使うルートには「○○を避ける」が出る')
         if await chip.count():
             name = await chip.first.get_attribute('data-avoid')
             await chip.first.click()
             for i in range(30):
                 await pg.wait_for_timeout(800)
                 if '避け中' in await pg.inner_text('#pvAvoid'): break
-            await pg.wait_for_timeout(1000)
+            await pg.wait_for_timeout(1500)
             ok(name not in (await pg.inner_text('#pvInfo')).split('\n')[0], f'「{name}を避ける」で、その道路を使わないルートになる')
-            await pg.locator('#pvAvoid [data-unavoid]').first.click(); await pg.wait_for_timeout(5000)
-        else:
-            print('  - 回避できる高速道路がルートに無いため省略')
+            await pg.locator('#pvAvoid [data-unavoid]').first.click(); await pg.wait_for_timeout(6000)
+        await pg.click('#btnPvClose'); await pg.wait_for_timeout(600)
+
+        print('2b. 検索 → ルート確認（近い区間）')
+        await ctx.set_geolocation({'latitude':35.7580, 'longitude':139.8160, 'accuracy':8}); await pg.wait_for_timeout(1500)
+        await search('江北橋')
+        ok(await pg.locator('#searchPanel .res').count() > 0, '検索結果が出る')
+        await pg.locator('#searchPanel .res').first.click(); await wait_preview()
+        ok((await st())['state'] == 'preview' and await pg.is_visible('#btnStart'), 'ルート確認画面と「開始」ボタンが出る')
+        await pg.wait_for_timeout(4000)   # 下道の追加検索が終わるのを待つ
 
         print('3. 案内 → 逆走 → 再検索')
         await pg.click('#btnStart'); await pg.wait_for_timeout(800)
@@ -156,7 +181,10 @@ async def main():
         await pg.evaluate("() => window.dispatchEvent(new Event('pagehide'))")
         cur = await pg.evaluate("() => JSON.parse(localStorage.getItem('rideCur')||'null')")
         ok(bool(cur) and len(cur['fixes']) > 0, '案内中の走行記録が端末に控えられる')
-        await pg.evaluate("() => { const m = JSON.parse(localStorage.getItem('memos')||'[]'); m.forEach(x => x.uploaded = false); localStorage.setItem('memos', JSON.stringify(m)); localStorage.setItem('fbCfg', JSON.stringify({repo:'test/feedback', token:'dummy'})); }")
+        await pg.evaluate("() => { const m = JSON.parse(localStorage.getItem('memos')||'[]'); m.forEach(x => x.uploaded = false); localStorage.setItem('memos', JSON.stringify(m)); }")
+        link = await pg.evaluate("() => { document.getElementById('fbRepo').value = 'test/feedback'; document.getElementById('fbToken').value = 'dummy'; let got = null; navigator.clipboard.writeText = async t => { got = t; }; document.getElementById('btnFbLink').click(); return new Promise(r => setTimeout(() => r(got), 300)); }")
+        ok(bool(link) and '#fb=' in link, '送信設定を移すリンクを作れる')
+        await pg.evaluate("() => localStorage.removeItem('fbCfg')")
         puts = []; state_ = {'n': 0}
         async def gh(route):
             state_['n'] += 1; puts.append(route.request.url.split('/contents/')[-1])
@@ -164,7 +192,9 @@ async def main():
             elif state_['n'] == 2: await route.fulfill(status=422, body='{}')   # 2回目は「もうある」
             else: await route.fulfill(status=201, body='{}')
         await ctx.route('https://api.github.com/**', gh)
-        await pg.reload(); await pg.wait_for_timeout(6000)              # タブを閉じて開き直した想定
+        await pg.goto(url + '?t=1' + link[link.index('#fb='):]); await pg.wait_for_timeout(6000)   # 別のブラウザでリンクを開いた想定（タブを閉じて開き直したのと同じ）
+        cfg = await pg.evaluate("() => [JSON.parse(localStorage.getItem('fbCfg')||'{}'), location.hash]")
+        ok(cfg[0].get('repo') == 'test/feedback' and cfg[0].get('token') == 'dummy' and cfg[1] == '', 'リンクを開くと送信設定が入り、リンクの印は消える')
         rides = await pg.evaluate("() => JSON.parse(localStorage.getItem('rides')||'[]')")
         ok(any(r['id'] == cur['id'] and r['events'][-1].get('reason') == 'interrupted' for r in rides), '終了を押さずに閉じた回の走行記録が、次に開いたとき保存される')
         ok(not await pg.evaluate("() => localStorage.getItem('rideCur')"), '控えは保存後に消える')
